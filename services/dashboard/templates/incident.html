@@ -87,6 +87,52 @@
 .resolve-btn:active  { opacity:0.8; }
 .resolve-btn:disabled { opacity:0.4; cursor:default; }
 
+.modal-backdrop {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+  z-index:100; align-items:center; justify-content:center;
+}
+.modal-backdrop.open { display:flex; }
+.modal {
+  background:var(--bg-2); border:1px solid var(--border);
+  border-radius:var(--radius-lg); padding:28px 28px 24px;
+  width:480px; max-width:90vw;
+}
+.modal-title { font-size:15px; font-weight:700; color:var(--text); margin-bottom:6px; }
+.modal-sub   { font-size:12px; color:var(--text-3); margin-bottom:18px; line-height:1.5; }
+.modal textarea {
+  width:100%; box-sizing:border-box;
+  background:var(--bg-3); border:1px solid var(--border-2);
+  border-radius:var(--radius); color:var(--text);
+  font-size:13px; font-family:var(--font-sans); line-height:1.6;
+  padding:10px 14px; resize:vertical; min-height:110px;
+  outline:none;
+}
+.modal textarea:focus { border-color:var(--accent); }
+.modal-actions { display:flex; gap:10px; margin-top:16px; justify-content:flex-end; }
+.modal-cancel {
+  font-size:12px; font-weight:600; color:var(--text-3);
+  background:none; border:1px solid var(--border); border-radius:var(--radius);
+  padding:6px 16px; cursor:pointer;
+}
+.modal-cancel:hover { color:var(--text); border-color:var(--border-2); }
+.modal-confirm {
+  font-size:12px; font-weight:600; color:#fff;
+  background:rgba(34,197,94,0.25); border:1px solid rgba(34,197,94,0.4);
+  border-radius:var(--radius); padding:6px 18px; cursor:pointer;
+  transition:background 0.15s;
+}
+.modal-confirm:hover    { background:rgba(34,197,94,0.38); }
+.modal-confirm:disabled { opacity:0.4; cursor:default; }
+
+.resolution-card {
+  background:var(--bg-2); border:1px solid rgba(34,197,94,0.2);
+  border-radius:var(--radius-lg); padding:18px 22px; margin-bottom:20px;
+  border-left:4px solid rgba(34,197,94,0.5);
+}
+.resolution-label { font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.1em; font-weight:600; margin-bottom:8px; }
+.resolution-meta  { font-size:11px; color:var(--text-3); margin-top:8px; font-family:var(--font-mono); }
+.resolution-text  { font-size:13px; color:var(--text-2); line-height:1.7; white-space:pre-wrap; }
+
 {% endblock %}
 
 {% block content %}
@@ -302,29 +348,75 @@
 </div>
 {% endif %}
 
+<!-- Resolution note (resolved incidents) -->
+{% if incident.status.value == 'resolved' and incident.resolved_at %}
+<div class="resolution-card">
+  <div class="resolution-label">✓ Resolution</div>
+  {% if incident.resolution_note %}
+  <div class="resolution-text">{{ incident.resolution_note }}</div>
+  {% else %}
+  <div class="resolution-text" style="color:var(--text-3); font-style:italic;">No resolution note provided.</div>
+  {% endif %}
+  <div class="resolution-meta">Resolved {{ incident.resolved_at.strftime('%b %d, %Y at %H:%M UTC') }}</div>
+</div>
+{% endif %}
+
+<!-- Resolve modal -->
+<div class="modal-backdrop" id="resolve-modal">
+  <div class="modal">
+    <div class="modal-title">Mark as Resolved</div>
+    <div class="modal-sub">Describe how this incident was resolved and what steps were taken. This will be saved to the incident history.</div>
+    <textarea id="resolution-note" placeholder="e.g. Rolled back deployment v2.3.1. Root cause was a missing null check in the payments service introduced in commit abc1234. Fixed in PR #456 and redeployed." autofocus></textarea>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeResolveModal()">Cancel</button>
+      <button class="modal-confirm" id="modal-confirm-btn" onclick="submitResolve('{{ incident.id }}')">Confirm resolve</button>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-async function resolveIncident(incidentId) {
-  const btn   = document.getElementById('resolve-btn');
-  const badge = document.getElementById('status-badge');
-  if (!btn || btn.disabled) return;
+function resolveIncident(incidentId) {
+  document.getElementById('resolve-modal').classList.add('open');
+  document.getElementById('resolution-note').focus();
+}
 
-  btn.disabled    = true;
-  btn.textContent = 'Resolving…';
+function closeResolveModal() {
+  document.getElementById('resolve-modal').classList.remove('open');
+}
+
+async function submitResolve(incidentId) {
+  const confirmBtn = document.getElementById('modal-confirm-btn');
+  const note       = document.getElementById('resolution-note').value.trim();
+  const btn        = document.getElementById('resolve-btn');
+  const badge      = document.getElementById('status-badge');
+
+  confirmBtn.disabled    = true;
+  confirmBtn.textContent = 'Resolving…';
 
   try {
-    const res = await fetch(`/api/incidents/${incidentId}/resolve`, { method: 'POST' });
+    const res = await fetch(`/api/incidents/${incidentId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolution_note: note }),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     badge.textContent = 'resolved';
     badge.className   = 'incident-status-badge status-resolved';
     btn.remove();
+    closeResolveModal();
+    window.location.reload();
   } catch (e) {
-    btn.disabled    = false;
-    btn.textContent = '✓ Mark resolved';
+    confirmBtn.disabled    = false;
+    confirmBtn.textContent = 'Confirm resolve';
     console.error('Resolve failed:', e);
   }
 }
+
+document.getElementById('resolve-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeResolveModal();
+});
 </script>
 {% endblock %}

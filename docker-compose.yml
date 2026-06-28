@@ -9,11 +9,11 @@ services:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
     healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc -w 2 localhost 2181 | grep -q imok"]
+      test: ["CMD-SHELL", "nc -z localhost 2181 || exit 1"]
       interval: 5s
       timeout: 5s
-      retries: 10
-      start_period: 10s
+      retries: 15
+      start_period: 30s
     deploy:
       resources:
         limits:
@@ -40,9 +40,9 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost 9094 || exit 1"]
       interval: 10s
-      timeout: 10s
+      timeout: 5s
       retries: 15
       start_period: 30s
     deploy:

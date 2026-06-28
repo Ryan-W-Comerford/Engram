@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
+from fastapi import Body, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -279,6 +279,7 @@ def incident_detail(
 @app.post("/api/incidents/{incident_id}/resolve")
 def resolve_incident(
     incident_id: str,
+    body: dict = Body(default={}),
     db: Session = Depends(get_db),
     project: Project = Depends(get_session_project),
 ):
@@ -295,6 +296,8 @@ def resolve_incident(
         return {"status": "already_resolved"}
 
     incident.status = IncidentStatus.RESOLVED
+    incident.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    incident.resolution_note = (body.get("resolution_note") or "").strip() or None
     db.commit()
     logger.info(f"Incident resolved | id={incident.id} project={project.name}")
     return {"status": "resolved"}

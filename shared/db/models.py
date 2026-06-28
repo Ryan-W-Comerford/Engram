@@ -86,6 +86,8 @@ class Incident(Base):
     status              = Column(SAEnum(IncidentStatus, name="incidentstatus", values_callable=_values), nullable=False, default=IncidentStatus.OPEN)
     ai_analyzed         = Column(Boolean, nullable=False, default=False)
     embedding           = Column(Vector(1536), nullable=True)
+    resolved_at         = Column(DateTime, nullable=True)
+    resolution_note     = Column(Text, nullable=True)
     created_at          = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     project          = relationship("Project", back_populates="incidents")
