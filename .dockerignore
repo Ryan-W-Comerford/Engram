@@ -1,0 +1,41 @@
+# Secrets — NEVER let these into an image layer
+.env
+.env.*
+!.env.example
+
+# Git metadata
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+.eggs
+dist
+build
+
+# Virtual environments
+.venv
+venv
+env
+
+# Dev tooling
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Test output
+.pytest_cache
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# SDK — not required by any service image
+sdk/

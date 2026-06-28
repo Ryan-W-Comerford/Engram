@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+{% block title %}— Live Events{% endblock %}
+{% block topbar_title %}Live Events{% endblock %}
+
+{% block extra_styles %}
+/* ── Controls bar ── */
+.live-controls {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+}
+.type-filter-btn {
+  padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border-2); background: var(--bg-2); color: var(--text-2);
+  cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
+  font-family: var(--font-sans);
+}
+.type-filter-btn:hover  { background: var(--bg-3); color: var(--text); }
+.type-filter-btn.active { background: var(--accent-dim); border-color: rgba(129,140,248,0.35); color: var(--accent); }
+.type-filter-btn.f-error.active   { background: var(--red-dim);   border-color: rgba(248,113,113,0.35); color: var(--red); }
+.type-filter-btn.f-trace.active   { background: var(--blue-dim);  border-color: rgba(96,165,250,0.35);  color: var(--blue); }
+.type-filter-btn.f-deployment.active { background: var(--green-dim); border-color: rgba(52,211,153,0.35); color: var(--green); }
+
+.pause-btn {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border-2); background: var(--bg-2); color: var(--text-2);
+  cursor: pointer; font-family: var(--font-sans);
+  transition: background 0.12s, color 0.12s;
+}
+.pause-btn:hover { background: var(--bg-3); color: var(--text); }
+.pause-btn.paused { border-color: rgba(251,191,36,0.35); background: var(--amber-dim); color: var(--amber); }
+
+.event-count-pill {
+  font-size: 11px; color: var(--text-3);
+  background: var(--bg-3); border: 1px solid var(--border);
+  padding: 2px 10px; border-radius: 20px;
+}
+
+/* ── Live event rows ── */
+.live-feed { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+
+.live-row {
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.live-row:last-child { border-bottom: none; }
+.live-row:hover .live-row-main { background: var(--bg-3); }
+.live-row.new-event .live-row-main { animation: flashNew 1.2s ease-out forwards; }
+@keyframes flashNew {
+  0%   { background: rgba(129,140,248,0.14); }
+  100% { background: transparent; }
+}
+
+.live-row-main {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px;
+}
+.live-expand-icon {
+  width: 14px; height: 14px; flex-shrink: 0; color: var(--text-3);
+  transition: transform 0.18s;
+}
+.live-row.open .live-expand-icon { transform: rotate(90deg); }
+
+.live-env {
+  font-size: 10px; color: var(--text-3); font-family: var(--font-mono);
+  background: var(--bg-4); border: 1px solid var(--border);
+  padding: 1px 6px; border-radius: 4px; flex-shrink: 0;
+}
+
+.live-detail { flex: 1; color: var(--text-2); font-size: 12px; font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-service { font-size: 11px; color: var(--text-3); flex-shrink: 0; min-width: 80px; text-align: right; }
+.live-ts      { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); flex-shrink: 0; width: 70px; text-align: right; }
+
+/* ── Expanded raw data ── */
+.live-row-detail {
+  display: none;
+  padding: 0 18px 14px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.live-row.open .live-row-detail { display: block; }
+
+.raw-json {
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.7;
+  color: var(--text-2); white-space: pre-wrap; word-break: break-all;
+  margin-top: 12px; padding: 12px 14px;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius);
+  max-height: 320px; overflow-y: auto;
+}
+/* Syntax colouring */
+.json-key     { color: var(--blue); }
+.json-str     { color: var(--green); }
+.json-num     { color: var(--amber); }
+.json-bool    { color: var(--purple); }
+.json-null    { color: var(--text-3); }
+
+.detail-meta {
+  display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px;
+}
+.detail-meta-item { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
+.detail-meta-item span { color: var(--text-2); }
+
+/* ── Empty / loading states ── */
+.live-empty { padding: 60px 18px; text-align: center; color: var(--text-3); font-size: 13px; line-height: 1.7; }
+.live-loading { padding: 20px 18px; text-align: center; color: var(--text-3); font-size: 12px; }
+{% endblock %}
+
+{% block content %}
+
+<div class="panel" style="margin-bottom:16px">
+  <div class="panel-header">
+    <span class="panel-title">Event Rate — last 30 min</span>
+    <span class="panel-count" id="chart-status">loading…</span>
+  </div>
+  <div class="panel-body">
+    <div class="chart-wrap">
+      <canvas id="eventChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="live-controls">
+  <button class="type-filter-btn active"  data-type="">All</button>
+  <button class="type-filter-btn f-error"  data-type="error">Errors</button>
+  <button class="type-filter-btn f-trace"  data-type="trace">Traces</button>
+  <span class="event-count-pill" id="ev-count">—</span>
+  <button class="pause-btn" id="pause-btn">
+    <svg id="pause-icon" width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="2" y="1.5" width="2.5" height="7" rx="1" fill="currentColor"/><rect x="5.5" y="1.5" width="2.5" height="7" rx="1" fill="currentColor"/></svg>
+    <svg id="play-icon"  width="10" height="10" viewBox="0 0 10 10" fill="none" style="display:none"><path d="M2.5 2l6 3-6 3V2z" fill="currentColor"/></svg>
+    <span id="pause-label">Pause</span>
+  </button>
+</div>
+
+<div class="live-feed" id="live-feed">
+  <div class="live-loading" id="live-loading">Loading…</div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ── Chart ────────────────────────────────────────────────────────────────────
+const ctx = document.getElementById('eventChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: 'Errors',
+        data: [],
+        borderColor: '#f87171',
+        backgroundColor: 'rgba(248,113,113,0.07)',
+        borderWidth: 1.5, pointRadius: 0, tension: 0.35, fill: true,
+      },
+      {
+        label: 'Traces',
+        data: [],
+        borderColor: '#60a5fa',
+        backgroundColor: 'rgba(96,165,250,0.06)',
+        borderWidth: 1.5, pointRadius: 0, tension: 0.35, fill: true,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 200 },
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: '#8892a4', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 10, padding: 16 } },
+      tooltip: {
+        backgroundColor: '#181c2a', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+        titleColor: '#dce3f0', bodyColor: '#8892a4',
+        titleFont: { family: 'JetBrains Mono', size: 11 },
+        bodyFont:  { family: 'JetBrains Mono', size: 11 },
+        padding: 10,
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#4c5668', font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.07)' } },
+      y: { beginAtZero: true, ticks: { color: '#4c5668', font: { family: 'JetBrains Mono', size: 9 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.07)' } }
+    }
+  }
+});
+
+let deploymentBuckets = [];
+Chart.register({
+  id: 'deployLines',
+  afterDraw(chart) {
+    const { ctx, scales: { x, y } } = chart;
+    deploymentBuckets.forEach(bucket => {
+      const idx = chart.data.labels.indexOf(bucket);
+      if (idx === -1) return;
+      const xPos = x.getPixelForValue(idx);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(129,140,248,0.5)';
+      ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(xPos, y.top); ctx.lineTo(xPos, y.bottom); ctx.stroke();
+      ctx.fillStyle = 'rgba(129,140,248,0.8)';
+      ctx.font = '9px JetBrains Mono';
+      ctx.fillText('deploy', xPos + 4, y.top + 11);
+      ctx.restore();
+    });
+  }
+});
+
+async function refreshChart() {
+  try {
+    const res  = await fetch('/api/metrics');
+    const data = await res.json();
+    chart.data.labels           = data.labels;
+    chart.data.datasets[0].data = data.errors;
+    chart.data.datasets[1].data = data.traces;
+    deploymentBuckets = data.deployments || [];
+    chart.update('none');
+    const total = data.errors.reduce((a,b)=>a+b,0) + data.traces.reduce((a,b)=>a+b,0);
+    document.getElementById('chart-status').textContent = `${total} events`;
+  } catch(e) { console.error('chart poll failed', e); }
+}
+
+refreshChart();
+setInterval(refreshChart, 10_000);
+
+// ── Live feed ─────────────────────────────────────────────────────────────────
+let paused      = false;
+let activeType  = '';
+let lastSeen    = null;   // ISO timestamp of most recent event we have
+let pollTimer   = null;
+let knownIds    = new Set();
+
+const feed      = document.getElementById('live-feed');
+const countPill = document.getElementById('ev-count');
+const pauseBtn  = document.getElementById('pause-btn');
+const pauseLbl  = document.getElementById('pause-label');
+const pauseIcon = document.getElementById('pause-icon');
+const playIcon  = document.getElementById('play-icon');
+
+// ── Filter buttons ──────────────────────────────────────────────────────────
+document.querySelectorAll('.type-filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.type-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeType = btn.dataset.type;
+    knownIds.clear();
+    lastSeen = null;
+    feed.innerHTML = '<div class="live-loading" id="live-loading">Loading…</div>';
+    poll(true);
+  });
+});
+
+// ── Pause / resume ──────────────────────────────────────────────────────────
+pauseBtn.addEventListener('click', () => {
+  paused = !paused;
+  pauseBtn.classList.toggle('paused', paused);
+  pauseLbl.textContent = paused ? 'Resume' : 'Pause';
+  pauseIcon.style.display = paused ? 'none'  : '';
+  playIcon.style.display  = paused ? ''      : 'none';
+  if (!paused) poll();
+});
+
+// ── Syntax-highlight JSON ───────────────────────────────────────────────────
+function colorJson(obj) {
+  const raw = JSON.stringify(obj, null, 2);
+  return raw
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+      let cls = 'json-num';
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? 'json-key' : 'json-str';
+      } else if (/true|false/.test(match)) {
+        cls = 'json-bool';
+      } else if (/null/.test(match)) {
+        cls = 'json-null';
+      }
+      return `<span class="${cls}">${match}</span>`;
+    });
+}
+
+// ── HTML escaping ────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Summary line for an event ───────────────────────────────────────────────
+function eventDetail(ev) {
+  const d = ev.raw_data || {};
+  if (ev.type === 'error')      return d.exception_type || d.message || 'Error';
+  if (ev.type === 'deployment') return `${(d.commit_sha||'?').slice(0,7)} on ${d.branch||'?'}`;
+  return `${d.method||'GET'} ${d.endpoint||'/'} ${d.status_code||''}`.trim();
+}
+
+// ── Render a single row ─────────────────────────────────────────────────────
+function makeRow(ev, isNew) {
+  const detail  = esc(eventDetail(ev));
+  const service = esc(ev.service || '—');
+  const env     = esc(ev.environment || '');
+  const type    = esc(ev.type);
+  const evId    = esc(ev.id);
+  const evTs    = esc(ev.ts_display);
+  const evTsFull = esc(ev.timestamp);
+
+  const div = document.createElement('div');
+  div.className = 'live-row' + (isNew ? ' new-event' : '');
+  div.dataset.id = ev.id;
+
+  div.innerHTML = `
+    <div class="live-row-main">
+      <svg class="live-expand-icon" viewBox="0 0 10 10" fill="none">
+        <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="event-type-badge badge-${type}">${type}</span>
+      <span class="live-env">${env}</span>
+      <span class="live-detail">${detail}</span>
+      <span class="live-service">${service}</span>
+      <span class="live-ts">${evTs}</span>
+    </div>
+    <div class="live-row-detail">
+      <div class="detail-meta">
+        <div class="detail-meta-item">id <span>${evId}</span></div>
+        <div class="detail-meta-item">service <span>${service}</span></div>
+        <div class="detail-meta-item">env <span>${env}</span></div>
+        <div class="detail-meta-item">time <span>${evTsFull}</span></div>
+      </div>
+      <pre class="raw-json">${colorJson(ev.raw_data || {})}</pre>
+    </div>
+  `;
+
+  // Toggle expand/collapse on click
+  div.querySelector('.live-row-main').addEventListener('click', () => {
+    div.classList.toggle('open');
+  });
+
+  return div;
+}
+
+// ── Poll the API ────────────────────────────────────────────────────────────
+async function poll(initial = false) {
+  if (paused && !initial) return;
+  clearTimeout(pollTimer);
+
+  try {
+    let url = '/api/events/stream?limit=50';
+    if (activeType) url += `&event_type=${activeType}`;
+
+    const res  = await fetch(url);
+    const data = await res.json();
+    const events = data.events || [];
+
+    const loadingEl = document.getElementById('live-loading');
+    if (loadingEl) loadingEl.remove();
+
+    if (events.length === 0 && feed.children.length === 0) {
+      feed.innerHTML = `
+        <div class="live-empty">
+          No ${activeType || ''} events yet.<br>
+          Instrument your app and events will appear here.
+        </div>`;
+      countPill.textContent = '0 events';
+    } else if (events.length > 0) {
+      // Prepend genuinely new events (not in knownIds) at the top
+      const newRows = [];
+      for (const ev of events) {
+        if (!knownIds.has(ev.id)) {
+          knownIds.add(ev.id);
+          newRows.push(ev);
+        }
+      }
+
+      if (initial || newRows.length > 0) {
+        const isFirst = initial || feed.querySelector('.live-empty');
+        if (isFirst) feed.innerHTML = '';
+
+        newRows.forEach(ev => {
+          feed.insertBefore(makeRow(ev, !initial), feed.firstChild);
+        });
+
+        // Keep max 200 rows
+        while (feed.children.length > 200) {
+          const last = feed.lastChild;
+          if (last) { knownIds.delete(last.dataset.id); feed.removeChild(last); }
+        }
+
+        if (events[0]) lastSeen = events[0].timestamp;
+      }
+
+      countPill.textContent = `${Math.min(feed.children.length, 200)} events`;
+    }
+
+  } catch(e) {
+    console.error('live poll failed', e);
+  }
+
+  if (!paused) pollTimer = setTimeout(poll, 3000);
+}
+
+poll(true);
+</script>
+{% endblock %}

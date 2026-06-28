@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}— Daily Report{% endblock %}
+{% block topbar_title %}Daily Report{% endblock %}
+
+{% block extra_styles %}
+.digest-layout { display: grid; grid-template-columns: 1fr 260px; gap: 20px; align-items: start; }
+
+/* Score ring */
+.score-card {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 24px; display: flex; align-items: center; gap: 20px; margin-bottom: 16px;
+}
+.score-ring {
+  width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 22px; font-weight: 700;
+  border: 3px solid;
+}
+.score-ring.score-great  { color: var(--green);  border-color: var(--green);  background: var(--green-dim); }
+.score-ring.score-ok     { color: var(--amber);  border-color: var(--amber);  background: var(--amber-dim); }
+.score-ring.score-poor   { color: var(--red);    border-color: var(--red);    background: var(--red-dim);   }
+.score-ring.score-none   { color: var(--text-3); border-color: var(--border-2); background: var(--bg-3); }
+.score-meta { flex: 1; }
+.score-date  { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.score-label { font-size: 12px; color: var(--text-3); }
+
+/* Summary */
+.summary-card {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 20px 22px; margin-bottom: 16px;
+}
+.summary-text { font-size: 14px; color: var(--text-2); line-height: 1.75; }
+
+/* Stats mini grid */
+.mini-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+.mini-stat { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
+.mini-stat-label { font-size: 10px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+.mini-stat-value { font-size: 22px; font-weight: 700; font-family: var(--font-mono); line-height: 1; }
+
+/* Highlights / concerns */
+.hc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.hc-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.hc-header { padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.hc-header.green { color: var(--green); }
+.hc-header.amber  { color: var(--amber); }
+.hc-body { padding: 14px 16px; }
+.hc-item { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text-2); line-height: 1.55; margin-bottom: 8px; }
+.hc-item:last-child { margin-bottom: 0; }
+.hc-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+.hc-dot.green { background: var(--green); }
+.hc-dot.amber  { background: var(--amber); }
+
+/* Recommendation */
+.rec-card {
+  background: var(--accent-dim); border: 1px solid rgba(129,140,248,0.2);
+  border-radius: var(--radius-lg); padding: 16px 20px;
+  display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px;
+}
+.rec-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.rec-label { font-size: 10px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.rec-text  { font-size: 13px; color: var(--text); line-height: 1.6; }
+
+/* Sidebar history */
+.history-panel {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  overflow: hidden; position: sticky; top: 20px;
+}
+.history-header { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text); }
+.history-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  text-decoration: none; transition: background 0.1s;
+}
+.history-item:last-child { border-bottom: none; }
+.history-item:hover { background: var(--bg-3); }
+.history-score {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  border: 2px solid;
+}
+.history-score.great { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+.history-score.ok    { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+.history-score.poor  { color: var(--red);   border-color: var(--red);   background: var(--red-dim); }
+.history-score.none  { color: var(--text-3); border-color: var(--border-2); background: var(--bg-3); }
+.history-date { font-size: 12px; color: var(--text-2); }
+.history-sub  { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+
+/* No-digest state */
+.no-digest {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 60px 40px; text-align: center;
+}
+.no-digest-icon { font-size: 32px; margin-bottom: 16px; opacity: 0.2; }
+.no-digest-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.no-digest-sub { font-size: 13px; color: var(--text-3); line-height: 1.7; max-width: 360px; margin: 0 auto; }
+{% endblock %}
+
+{% block content %}
+{% if digest %}
+  {% set d = digest.data or {} %}
+  {% set score = d.get('health_score') %}
+  {% if score is not none %}
+    {% if score >= 80 %}{% set score_cls = 'great' %}
+    {% elif score >= 60 %}{% set score_cls = 'ok' %}
+    {% else %}{% set score_cls = 'poor' %}{% endif %}
+  {% else %}{% set score_cls = 'none' %}{% endif %}
+
+<div class="digest-layout">
+  <div>
+    <!-- Score + date header -->
+    <div class="score-card">
+      <div class="score-ring score-{{ score_cls }}">
+        {% if score is not none %}{{ score }}{% else %}—{% endif %}
+      </div>
+      <div class="score-meta">
+        <div class="score-date">{{ digest.date.strftime('%A, %B %-d') }}</div>
+        <div class="score-label">
+          {% if score is not none %}
+            Health score · {% if score >= 80 %}Looking good{% elif score >= 60 %}Some concerns{% else %}Needs attention{% endif %}
+          {% else %}
+            No AI summary available
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini stats -->
+    <div class="mini-stats">
+      <div class="mini-stat">
+        <div class="mini-stat-label">Total Events</div>
+        <div class="mini-stat-value" style="color:var(--blue)">{{ d.get('total_events', 0) }}</div>
+      </div>
+      <div class="mini-stat">
+        <div class="mini-stat-label">Errors</div>
+        <div class="mini-stat-value" style="color:{% if (d.get('error_rate',0)|float) > 10 %}var(--red){% elif (d.get('error_rate',0)|float) > 3 %}var(--amber){% else %}var(--green){% endif %}">
+          {{ d.get('error_count', 0) }}
+        </div>
+      </div>
+      <div class="mini-stat">
+        <div class="mini-stat-label">Deployments</div>
+        <div class="mini-stat-value" style="color:var(--accent)">{{ d.get('deployment_count', 0) }}</div>
+      </div>
+      <div class="mini-stat">
+        <div class="mini-stat-label">Incidents</div>
+        <div class="mini-stat-value" style="color:{% if d.get('incident_count', 0) > 0 %}var(--red){% else %}var(--green){% endif %}">
+          {{ d.get('incident_count', 0) }}
+        </div>
+      </div>
+    </div>
+
+    <!-- AI summary -->
+    {% if digest.summary %}
+    <div class="summary-card">
+      <p class="summary-text">{{ digest.summary }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Highlights + concerns -->
+    {% if d.get('highlights') or d.get('concerns') %}
+    <div class="hc-row">
+      <div class="hc-card">
+        <div class="hc-header green">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Highlights
+        </div>
+        <div class="hc-body">
+          {% for item in d.get('highlights', []) %}
+          <div class="hc-item"><div class="hc-dot green"></div><span>{{ item }}</span></div>
+          {% else %}
+          <div style="color:var(--text-3); font-size:12px">Nothing notable.</div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="hc-card">
+        <div class="hc-header amber">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v5M6 9.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          Concerns
+        </div>
+        <div class="hc-body">
+          {% for item in d.get('concerns', []) %}
+          <div class="hc-item"><div class="hc-dot amber"></div><span>{{ item }}</span></div>
+          {% else %}
+          <div style="color:var(--text-3); font-size:12px">No concerns.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Recommendation -->
+    {% if d.get('recommendation') %}
+    <div class="rec-card">
+      <div class="rec-icon" style="color:var(--accent)">→</div>
+      <div>
+        <div class="rec-label">Recommended action</div>
+        <div class="rec-text">{{ d.get('recommendation') }}</div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Top errors -->
+    {% if d.get('top_errors') %}
+    <div class="panel" style="margin-top:4px">
+      <div class="panel-header">
+        <span class="panel-title">Top Error Types</span>
+        <span class="panel-count">{{ d.get('error_rate', 0) }}% error rate</span>
+      </div>
+      <div class="panel-body">
+        {% for err in d.get('top_errors', []) %}
+        <div class="event-row">
+          <span class="event-type-badge badge-error">error</span>
+          <span class="event-detail">{{ err.type }}</span>
+          <span class="event-time">{{ err.count }} occurrences</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Sidebar: history -->
+  <div>
+    {% if history %}
+    <div class="history-panel">
+      <div class="history-header">Previous days</div>
+      {% for h in history %}
+        {% set hs = h.data.get('health_score') if h.data else none %}
+        {% if hs is not none %}
+          {% if hs >= 80 %}{% set hcls = 'great' %}
+          {% elif hs >= 60 %}{% set hcls = 'ok' %}
+          {% else %}{% set hcls = 'poor' %}{% endif %}
+        {% else %}{% set hcls = 'none' %}{% endif %}
+        <div class="history-item">
+          <div class="history-score {{ hcls }}">{% if hs is not none %}{{ hs }}{% else %}—{% endif %}</div>
+          <div>
+            <div class="history-date">{{ h.date.strftime('%b %-d') }}</div>
+            {% if h.data %}
+            <div class="history-sub">{{ h.data.get('error_count', 0) }} errors · {{ h.data.get('incident_count', 0) }} incidents</div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% else %}
+<div class="no-digest">
+  <div class="no-digest-icon">◎</div>
+  <div class="no-digest-title">No report yet</div>
+  <div class="no-digest-sub">
+    The AI service generates a daily report each night at midnight UTC.<br>
+    Check back tomorrow morning — or trigger one manually via the AI service.
+  </div>
+</div>
+{% endif %}
+{% endblock %}

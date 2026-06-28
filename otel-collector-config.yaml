@@ -1,0 +1,98 @@
+# otel-collector-config.yaml
+#
+# Security model:
+#   - OTLP receivers require a Bearer token in the Authorization header
+#   - Token is set via OTEL_BEARER_TOKEN environment variable
+#   - Apps must set: OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>
+#   - The auth/oidc extension is NOT used — we use the simpler bearertokenauth
+#     extension which validates a static shared secret, appropriate for MVP
+#
+# Pipeline:
+#   receivers:  OTLP/gRPC (:4317) + OTLP/HTTP (:4318) — both token-gated
+#   processors: batch → transform (OTel → Engram schema)
+#   exporters:  kafka (engram.events.raw) + debug
+
+extensions:
+  bearertokenauth:
+    # Static token validated on every inbound OTLP request.
+    # Set OTEL_BEARER_TOKEN in docker-compose / .env.
+    # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+    token: "${env:OTEL_BEARER_TOKEN}"
+
+  # Health check endpoint — unauthenticated, used by Docker/K8s probes
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        auth:
+          authenticator: bearertokenauth
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+
+  transform/traces:
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["engram.project_id"], resource.attributes["engram.project_id"])
+          - set(attributes["event_type"], "error") where status.code == STATUS_CODE_ERROR
+          - set(attributes["event_type"], "trace") where status.code != STATUS_CODE_ERROR
+          - set(attributes["endpoint"],    attributes["http.route"])    where IsMatch(attributes["http.route"], ".+")
+          - set(attributes["endpoint"],    attributes["url.path"])      where attributes["endpoint"] == nil
+          - set(attributes["method"],      attributes["http.request.method"])
+          - set(attributes["status_code"], attributes["http.response.status_code"])
+          - set(attributes["duration_ms"], duration / 1000000)
+          - set(attributes["exception_type"],  attributes["exception.type"])
+          - set(attributes["message"],         attributes["exception.message"])
+          - set(attributes["stack_trace"],     attributes["exception.stacktrace"])
+          - set(attributes["service"],         resource.attributes["service.name"])
+          - set(attributes["environment"],     resource.attributes["deployment.environment"])
+
+  transform/logs:
+    log_statements:
+      - context: log
+        statements:
+          - set(attributes["engram.project_id"], resource.attributes["engram.project_id"])
+          - set(attributes["service"],    resource.attributes["service.name"])
+          - set(attributes["environment"], resource.attributes["deployment.environment"])
+          - set(attributes["event_type"], "error") where severity_number >= SEVERITY_NUMBER_ERROR
+          - set(attributes["event_type"], "trace") where severity_number < SEVERITY_NUMBER_ERROR
+          - set(attributes["exception_type"],  attributes["exception.type"])
+          - set(attributes["message"],         body)
+          - set(attributes["stack_trace"],     attributes["exception.stacktrace"])
+
+exporters:
+  kafka:
+    brokers:
+      - kafka:9092
+    topic: engram.events.raw
+    encoding: otlp_json
+
+  debug:
+    verbosity: basic
+
+service:
+  extensions: [bearertokenauth, health_check]
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      processors: [batch, transform/traces]
+      exporters:  [kafka, debug]
+    logs:
+      receivers:  [otlp]
+      processors: [batch, transform/logs]
+      exporters:  [kafka, debug]
+  telemetry:
+    logs:
+      level: info

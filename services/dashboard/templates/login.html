@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Engram — Sign in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0b0e15;
+      --bg-2:       #111420;
+      --bg-3:       #181c2a;
+      --border:     rgba(255,255,255,0.07);
+      --border-2:   rgba(255,255,255,0.13);
+      --text:       #dce3f0;
+      --text-2:     #8892a4;
+      --text-3:     #4c5668;
+      --accent:     #818cf8;
+      --accent-dim: rgba(129,140,248,0.12);
+      --red:        #f87171;
+      --red-dim:    rgba(248,113,113,0.12);
+      --font-sans:  'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono:  'JetBrains Mono', monospace;
+      --radius:     6px;
+      --radius-lg:  10px;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 360px;
+    }
+
+    /* Logo */
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 32px;
+    }
+    .logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #6366f1 0%, #a78bfa 100%);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 16px rgba(99,102,241,0.40);
+      flex-shrink: 0;
+    }
+    .logo-name { font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+
+    /* Card */
+    .card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+    }
+
+    .card-heading { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .card-sub     { font-size: 13px; color: var(--text-3); line-height: 1.6; margin-bottom: 22px; }
+
+    /* Field */
+    .field-label {
+      display: block;
+      font-size: 12px; font-weight: 500; color: var(--text-2);
+      margin-bottom: 6px;
+    }
+
+    .input-wrap { position: relative; margin-bottom: 4px; }
+
+    .key-input {
+      width: 100%;
+      background: var(--bg-3);
+      border: 1px solid var(--border-2);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 10px 52px 10px 12px;
+      border-radius: var(--radius);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .key-input:focus          { border-color: var(--accent); }
+    .key-input.is-error       { border-color: var(--red); }
+    .key-input::placeholder   { color: var(--text-3); }
+
+    .toggle-btn {
+      position: absolute; right: 0; top: 0; bottom: 0;
+      padding: 0 13px;
+      background: none; border: none; cursor: pointer;
+      color: var(--text-3); font-size: 11px; font-weight: 600;
+      font-family: var(--font-sans); text-transform: uppercase; letter-spacing: 0.06em;
+      transition: color 0.15s;
+    }
+    .toggle-btn:hover { color: var(--text-2); }
+
+    /* Error */
+    .error-banner {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--red-dim);
+      border: 1px solid rgba(248,113,113,0.20);
+      border-radius: var(--radius);
+      padding: 9px 12px;
+      margin-top: 10px;
+      font-size: 13px; color: var(--red);
+    }
+
+    /* Submit */
+    .submit-btn {
+      width: 100%; margin-top: 18px;
+      background: var(--accent);
+      border: none; border-radius: var(--radius);
+      color: #fff;
+      font-family: var(--font-sans); font-size: 14px; font-weight: 600;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .submit-btn:hover  { opacity: 0.88; }
+    .submit-btn:active { transform: scale(0.99); }
+
+    /* First-time setup accordion */
+    .setup-guide {
+      margin-top: 20px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .setup-guide summary {
+      list-style: none;
+      padding: 13px 16px;
+      font-size: 13px; font-weight: 500; color: var(--text-2);
+      cursor: pointer;
+      display: flex; align-items: center; gap: 8px;
+      user-select: none;
+      transition: color 0.15s;
+    }
+    .setup-guide summary:hover { color: var(--text); }
+    .setup-guide summary::-webkit-details-marker { display: none; }
+
+    .setup-guide[open] summary { color: var(--text); border-bottom: 1px solid var(--border); }
+
+    .chevron {
+      width: 14px; height: 14px; flex-shrink: 0;
+      transition: transform 0.2s;
+      color: var(--text-3);
+    }
+    .setup-guide[open] .chevron { transform: rotate(90deg); }
+
+    .setup-body {
+      padding: 16px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    .setup-step {
+      display: flex; gap: 10px;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      border: 1px solid rgba(129,140,248,0.25);
+      color: var(--accent);
+      font-size: 11px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
+    }
+    .step-body {
+      flex: 1; font-size: 12px; color: var(--text-2); line-height: 1.6;
+    }
+    .step-body strong { color: var(--text); font-weight: 500; }
+    .step-body code {
+      font-family: var(--font-mono);
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 1px 5px; border-radius: 3px;
+      font-size: 11px;
+    }
+
+    .cmd-block {
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      margin-top: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px; line-height: 1.65;
+      color: var(--text-2);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .cmd-block .kw  { color: var(--accent); }
+    .cmd-block .str { color: #86efac; }     /* soft green for values */
+    .cmd-block .dim { color: var(--text-3); }
+
+    .setup-note {
+      font-size: 11px; color: var(--text-3);
+      border-top: 1px solid var(--border);
+      padding-top: 12px; line-height: 1.6;
+    }
+    .setup-note strong { color: var(--text-2); font-weight: 500; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="logo">
+    <div class="logo-icon">
+      <svg width="20" height="13" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polyline points="0,6 3.5,6 5,1.5 7,10.5 9,3 10.5,6.5 13,6.5 18,6.5"
+          stroke="white" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="logo-name">Engram</span>
+  </div>
+
+  <div class="card">
+    <div class="card-heading">Sign in to your project</div>
+    <div class="card-sub">Enter your project API key — it starts with <code style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);background:var(--bg-3);padding:1px 5px;border-radius:3px;">pk_live_</code> and was shown once when the project was created.</div>
+
+    <form method="POST" action="/login" autocomplete="on">
+      <label class="field-label" for="api_key">Project API key</label>
+      <div class="input-wrap">
+        <input
+          id="api_key"
+          name="api_key"
+          type="password"
+          class="key-input {% if error %}is-error{% endif %}"
+          placeholder="pk_live_…"
+          autocomplete="current-password"
+          autofocus
+          spellcheck="false"
+          required
+        />
+        <button type="button" class="toggle-btn" id="toggle-btn" onclick="toggleVisibility()">Show</button>
+      </div>
+
+      {% if error %}
+      <div class="error-banner">
+        Invalid API key — check it and try again.
+      </div>
+      {% endif %}
+
+      <button type="submit" class="submit-btn">Sign in</button>
+    </form>
+  </div>
+
+  <details class="setup-guide">
+    <summary>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+      Don't have a key? How to get started
+    </summary>
+
+    <div class="setup-body">
+
+      <div class="setup-step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <strong>Find your <code>ADMIN_API_KEY</code></strong><br>
+          The person who deployed Engram set this in the <code>.env</code> file
+          (the <code>ADMIN_API_KEY</code> line). It's separate from the project key —
+          it's an admin secret used only to create and manage projects.
+        </div>
+      </div>
+
+      <div class="setup-step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <strong>Create a project</strong><br>
+          Run this from any terminal (replace the values in angle brackets):
+          <div class="cmd-block"><span class="kw">curl</span> -s -X POST <span class="str">http://localhost:8000/projects</span> \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -H <span class="str">"X-Admin-Key: &lt;ADMIN_API_KEY&gt;"</span> \
+  -d <span class="str">'{"name": "my-app"}'</span> | python3 -m json.tool</div>
+        </div>
+      </div>
+
+      <div class="setup-step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <strong>Copy the <code>api_key</code> from the response</strong><br>
+          The response JSON contains an <code>api_key</code> starting with <code>pk_live_</code>.
+          Paste it into the field above. <strong>Save it now</strong> — it's shown only once.
+        </div>
+      </div>
+
+      <div class="setup-note">
+        Tip: create one project per environment (<code>my-app-dev</code>, <code>my-app-staging</code>, <code>my-app-production</code>)
+        so dev noise never reaches your production incident feed.
+      </div>
+
+    </div>
+  </details>
+
+</div>
+<script>
+  function toggleVisibility() {
+    const input = document.getElementById('api_key');
+    const btn   = document.getElementById('toggle-btn');
+    if (input.type === 'password') {
+      input.type  = 'text';
+      btn.textContent = 'Hide';
+    } else {
+      input.type  = 'password';
+      btn.textContent = 'Show';
+    }
+  }
+</script>
+</body>
+</html>

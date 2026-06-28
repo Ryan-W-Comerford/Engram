@@ -1,0 +1,242 @@
+services:
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc -w 2 localhost 2181 | grep -q imok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    ports:
+      - "9094:9094"
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5432:5432"
+    # Raise max_connections so the pool across all services fits comfortably.
+    # Formula: (pool_size + max_overflow) × service_count < max_connections
+    command: ["postgres", "-c", "max_connections=200"]
+    environment:
+      POSTGRES_DB: pulseai
+      POSTGRES_USER: pulseai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pulseai_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulseai -d pulseai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.102.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - "OTEL_BEARER_TOKEN=${OTEL_BEARER_TOKEN:?Error: OTEL_BEARER_TOKEN is not set in .env}"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  ingestor:
+    build:
+      context: .
+      dockerfile: services/ingestor/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
+      # Point Alembic migrations at the direct Postgres port, bypassing PgBouncer
+      # if you add a pooler in front of postgres later.
+      - MIGRATIONS_DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
+      - OTEL_COLLECTOR_ENDPOINT=http://otel-collector:4317
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_RAW=engram.events.raw
+      # Managed Kafka (Confluent Cloud / MSK / Upstash) — leave blank for local dev
+      - KAFKA_SECURITY_PROTOCOL=${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}
+      - KAFKA_SASL_MECHANISM=${KAFKA_SASL_MECHANISM:-PLAIN}
+      - KAFKA_SASL_USERNAME=${KAFKA_SASL_USERNAME:-}
+      - KAFKA_SASL_PASSWORD=${KAFKA_SASL_PASSWORD:-}
+      # Connection pool tuning
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  processor:
+    build:
+      context: .
+      dockerfile: services/processor/Dockerfile
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_RAW=engram.events.raw
+      - KAFKA_TOPIC_ANOMALIES=engram.alerts.anomalies
+      - KAFKA_TOPIC_DLQ=engram.events.dlq
+      - KAFKA_CONSUMER_GROUP=engram-processor
+      # Managed Kafka — leave blank for local dev
+      - KAFKA_SECURITY_PROTOCOL=${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}
+      - KAFKA_SASL_MECHANISM=${KAFKA_SASL_MECHANISM:-PLAIN}
+      - KAFKA_SASL_USERNAME=${KAFKA_SASL_USERNAME:-}
+      - KAFKA_SASL_PASSWORD=${KAFKA_SASL_PASSWORD:-}
+      # Redis for sliding window state — falls back to in-memory if not set
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  ai:
+    build:
+      context: .
+      dockerfile: services/ai/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_ANOMALIES=engram.alerts.anomalies
+      - KAFKA_TOPIC_DLQ=engram.alerts.dlq
+      - KAFKA_CONSUMER_GROUP=engram-ai-service
+      # Managed Kafka — leave blank for local dev
+      - KAFKA_SECURITY_PROTOCOL=${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}
+      - KAFKA_SASL_MECHANISM=${KAFKA_SASL_MECHANISM:-PLAIN}
+      - KAFKA_SASL_USERNAME=${KAFKA_SASL_USERNAME:-}
+      - KAFKA_SASL_PASSWORD=${KAFKA_SASL_PASSWORD:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY:-}
+      - ALERT_EMAIL_FROM=${ALERT_EMAIL_FROM:-}
+      - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-}
+      - DASHBOARD_BASE_URL=${DASHBOARD_BASE_URL:-http://localhost:8080}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: services/dashboard/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
+      - INGESTOR_HOST=${INGESTOR_HOST:-http://localhost:8000}
+      - DASHBOARD_SECRET_KEY=${DASHBOARD_SECRET_KEY}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+volumes:
+  kafka_data:
+  postgres_data:
+  zookeeper_data:
+  zookeeper_log:
+  redis_data:

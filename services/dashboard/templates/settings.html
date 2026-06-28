@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}— Settings{% endblock %}
+{% block topbar_title %}Settings{% endblock %}
+
+{% block extra_styles %}
+.settings-section  { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:20px; overflow:hidden; }
+.settings-header   { padding:14px 20px; border-bottom:1px solid var(--border); }
+.settings-header h2 { font-size:14px; font-weight:600; color:var(--text); }
+.settings-header p  { font-size:12px; color:var(--text-3); margin-top:3px; }
+.settings-body     { padding:22px; }
+.field-label       { font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:7px; font-weight:600; }
+.code-field        { display:flex; align-items:center; gap:8px; background:var(--bg-3); border:1px solid var(--border-2); border-radius:var(--radius); padding:10px 14px; margin-bottom:16px; }
+.code-val          { flex:1; font-family:var(--font-mono); font-size:12px; color:var(--text-2); word-break:break-all; }
+.copy-btn          { font-size:11px; color:var(--accent); background:var(--accent-dim); border:none; border-radius:20px; padding:4px 12px; cursor:pointer; white-space:nowrap; transition:background 0.15s; font-family:var(--font-sans); font-weight:500; }
+.copy-btn:hover    { background:rgba(129,140,248,0.22); }
+.field-hint        { font-size:12px; color:var(--text-3); margin-bottom:16px; line-height:1.7; }
+.code-block        { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; font-family:var(--font-mono); font-size:12px; color:var(--text-2); line-height:1.9; overflow-x:auto; margin-bottom:8px; }
+.code-block .c     { color:var(--text-3); }
+.code-block .kw    { color:var(--purple); }
+.code-block .st    { color:var(--green); }
+.code-block .fn    { color:var(--blue); }
+.divider           { height:1px; background:var(--border); margin:18px 0; }
+{% endblock %}
+
+{% block content %}
+{% if project %}
+
+<!-- GitHub Webhook -->
+<div class="settings-section">
+  <div class="settings-header">
+    <h2>GitHub Webhook</h2>
+    <p>Paste this URL into your repository webhook settings to track deployments</p>
+  </div>
+  <div class="settings-body">
+    <div class="field-label">Payload URL</div>
+    <div class="code-field">
+      <span class="code-val" id="webhook-url">{{ webhook_url }}</span>
+      <button class="copy-btn" onclick="copyTo('webhook-url', this)">Copy</button>
+    </div>
+    <p class="field-hint">
+      GitHub → Repository → Settings → Webhooks → Add webhook<br>
+      Set <strong style="color:var(--text-2)">Content type</strong> to <code style="color:var(--green); font-family:var(--font-mono)">application/json</code> · Select <strong style="color:var(--text-2)">Just the push event</strong>
+    </p>
+
+    <div class="field-label">Webhook Secret (recommended)</div>
+    <p class="field-hint">
+      Set <code style="color:var(--green); font-family:var(--font-mono)">GITHUB_WEBHOOK_SECRET</code> in your .env file and paste the same value into GitHub's "Secret" field.
+      Generate: <code style="color:var(--blue); font-family:var(--font-mono)">python -c "import secrets; print(secrets.token_hex(32))"</code>
+    </p>
+  </div>
+</div>
+
+<!-- SDK quickstart -->
+<div class="settings-section">
+  <div class="settings-header">
+    <h2>SDK Quickstart</h2>
+    <p>Instrument any Python app in under a minute</p>
+  </div>
+  <div class="settings-body">
+    <div class="field-label">1 · Install</div>
+    <div class="code-block">pip install -e ./sdk</div>
+
+    <div class="field-label" style="margin-top:18px">2 · Instrument (FastAPI)</div>
+    <div class="code-block">
+<span class="kw">from</span> pulseai_sdk <span class="kw">import</span> Engram<br>
+<br>
+pulse = <span class="fn">Engram</span>(<br>
+&nbsp;&nbsp;&nbsp;&nbsp;api_key=<span class="st">"pk_live_…"</span>,  <span class="c"># use ENGRAM_API_KEY env var in prod</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;host=<span class="st">"{{ ingestor_host }}"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;environment=<span class="st">"production"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;service=<span class="st">"my-api"</span>,<br>
+)<br>
+pulse.<span class="fn">auto_instrument</span>(app)  <span class="c"># wraps FastAPI or Flask</span>
+    </div>
+
+    <div class="field-label" style="margin-top:18px">3 · Manual capture (optional)</div>
+    <div class="code-block">
+<span class="kw">try</span>:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;result = <span class="fn">call_external_api</span>()<br>
+<span class="kw">except</span> TimeoutError <span class="kw">as</span> e:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;pulse.<span class="fn">capture_error</span>(exception_type=<span class="st">"TimeoutError"</span>, message=<span class="fn">str</span>(e))
+    </div>
+
+    <div class="field-label" style="margin-top:18px">4 · Record a deployment from CI/CD</div>
+    <div class="code-block">
+pulse.<span class="fn">capture_deployment</span>(commit_sha=<span class="st">"a3f8c21"</span>, branch=<span class="st">"main"</span>, pusher=<span class="st">"ryan"</span>)
+    </div>
+  </div>
+</div>
+
+<!-- Ingestor info -->
+<div class="settings-section">
+  <div class="settings-header">
+    <h2>Ingestor API</h2>
+    <p>Direct HTTP API for sending events</p>
+  </div>
+  <div class="settings-body">
+    <div class="field-label">Base URL</div>
+    <div class="code-field">
+      <span class="code-val">{{ ingestor_host }}</span>
+    </div>
+
+    <div class="field-label">Interactive docs</div>
+    <div class="code-field">
+      <span class="code-val" id="docs-url">{{ ingestor_host }}/docs</span>
+      <a href="{{ ingestor_host }}/docs" target="_blank" class="copy-btn">Open →</a>
+    </div>
+
+    <p class="field-hint">
+      Authenticate all requests with <code style="color:var(--green); font-family:var(--font-mono)">X-API-Key: pk_live_…</code>
+    </p>
+  </div>
+</div>
+
+{% else %}
+<div style="padding:60px 0; text-align:center; color:var(--text-3)">
+  <div style="font-size:28px; margin-bottom:16px; opacity:0.25">◈</div>
+  No project found. Create one first:<br><br>
+  <div class="code-block" style="display:inline-block; text-align:left; padding:14px 20px">
+    curl -X POST {{ ingestor_host }}/projects \<br>
+    &nbsp;&nbsp;-H "Content-Type: application/json" \<br>
+    &nbsp;&nbsp;-H "X-Admin-Key: &lt;your-ADMIN_API_KEY&gt;" \<br>
+    &nbsp;&nbsp;-d '{"name": "my-app"}'
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function copyTo(id, btn) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+{% block title %}— Overview{% endblock %}
+{% block topbar_title %}{{ project.name }}{% endblock %}
+
+{% block extra_styles %}
+
+/* ── Metric strip ── */
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.metric-card {
+  background: var(--bg-2);
+  padding: 16px 18px 14px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  border-radius: 0;
+}
+.mc-neutral::before { background: var(--border-2); }
+.mc-green::before   { background: var(--green); }
+.mc-red::before     { background: var(--red); }
+.mc-amber::before   { background: var(--amber); }
+.mc-accent::before  { background: var(--accent); }
+.metric-label { font-size: 10px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; }
+.metric-value { font-size: 26px; font-weight: 700; font-family: var(--font-mono); line-height: 1; letter-spacing: -1px; color: var(--text); }
+.metric-value.mv-red    { color: var(--red); }
+.metric-value.mv-amber  { color: var(--amber); }
+.metric-value.mv-green  { color: var(--green); }
+.metric-value.mv-accent { color: var(--accent); }
+.metric-sub { font-size: 11px; color: var(--text-3); }
+
+/* ── Overview main grid ── */
+.ov-main {
+  display: grid;
+  grid-template-columns: 1fr 290px;
+  gap: 14px;
+  align-items: stretch;
+}
+.ov-left  { display: flex; flex-direction: column; gap: 14px; }
+.ov-right { display: flex; flex-direction: column; gap: 0; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+
+/* ── Section headers (tighter than .panel-header) ── */
+.sh {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sh + .sh { border-top: 1px solid var(--border); }
+.sh-title { font-size: 10px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
+.sh-link  { font-size: 11px; color: var(--accent); text-decoration: none; font-weight: 500; }
+.sh-link:hover { opacity: 0.75; }
+
+/* ── Chart panel ── */
+.chart-panel { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.chart-inner { padding: 12px 16px 10px; height: 200px; }
+
+/* ── Event stream (live feed) ── */
+.stream-panel { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; flex: 1; }
+.stream-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 56px 52px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.stream-row:last-child { border-bottom: none; }
+.stream-row:hover { background: var(--bg-3); }
+.st-badge {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  padding: 2px 5px; border-radius: 3px; letter-spacing: 0.04em; text-align: center;
+}
+.st-badge.b-error      { background: var(--red-dim);   color: var(--red); }
+.st-badge.b-trace      { background: var(--blue-dim);  color: var(--blue); }
+.st-badge.b-deployment { background: var(--green-dim); color: var(--green); }
+.st-detail { font-size: 12px; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-svc    { font-size: 10px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-time   { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); text-align: right; }
+
+/* ── Incidents (right column) ── */
+.inc-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  transition: background 0.1s;
+}
+.inc-row:last-child { border-bottom: none; }
+.inc-row:hover { background: var(--bg-3); }
+.inc-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.inc-dot.c { background: var(--red);    box-shadow: 0 0 6px rgba(248,113,113,0.5); }
+.inc-dot.h { background: var(--amber);  box-shadow: 0 0 6px rgba(251,191,36,0.4); }
+.inc-dot.m { background: var(--blue); }
+.inc-dot.l, .inc-dot.u { background: var(--text-3); }
+.inc-body  { flex: 1; min-width: 0; }
+.inc-title { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+.inc-meta  { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
+.inc-status { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; flex-shrink: 0; letter-spacing: 0.04em; }
+.is-open          { background: var(--red-dim);   color: var(--red); }
+.is-investigating  { background: var(--amber-dim); color: var(--amber); }
+.is-resolved      { background: var(--green-dim); color: var(--green); }
+
+/* ── Deployments (right column) ── */
+.dep-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.dep-row:last-child { border-bottom: none; }
+.dep-row:hover { background: var(--bg-3); }
+.dep-sha    { font-family: var(--font-mono); font-size: 11px; color: var(--green); background: rgba(52,211,153,0.10); padding: 1px 6px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(52,211,153,0.15); }
+.dep-branch { flex: 1; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dep-time   { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); flex-shrink: 0; }
+
+/* ── Right column divider ── */
+.rc-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+/* ── Daily report (right column) ── */
+.rr {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+  border: 2px solid;
+}
+.rr.great { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+.rr.ok    { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+.rr.poor  { color: var(--red);   border-color: var(--red);   background: var(--red-dim);  }
+.rr.none  { color: var(--text-3); border-color: var(--border-2); background: var(--bg-3); }
+
+/* ── Empty inline ── */
+.empty-inline { padding: 24px 16px; text-align: center; color: var(--text-3); font-size: 12px; }
+
+{% endblock %}
+
+{% block content %}
+
+{# ── Health score from digest ── #}
+{% if digest %}
+  {% set d = digest.data or {} %}
+  {% set score = d.get('health_score') %}
+  {% if score is not none %}
+    {% if score >= 80 %}{% set scls = 'great' %}{% set smsg = 'Healthy' %}{% set smc = 'mc-green' %}{% set mvc = 'mv-green' %}
+    {% elif score >= 60 %}{% set scls = 'ok' %}{% set smsg = 'Fair' %}{% set smc = 'mc-amber' %}{% set mvc = 'mv-amber' %}
+    {% else %}{% set scls = 'poor' %}{% set smsg = 'Degraded' %}{% set smc = 'mc-red' %}{% set mvc = 'mv-red' %}{% endif %}
+  {% else %}{% set scls = 'none' %}{% set smsg = '—' %}{% set smc = 'mc-neutral' %}{% set mvc = '' %}{% endif %}
+{% else %}
+  {% set scls = 'none' %}{% set smsg = '—' %}{% set smc = 'mc-neutral' %}{% set mvc = '' %}{% set score = none %}
+{% endif %}
+
+{# ── Error rate color class ── #}
+{% if stats.error_rate > 10 %}{% set er_cls = 'mc-red' %}{% set er_mvc = 'mv-red' %}
+{% elif stats.error_rate > 3 %}{% set er_cls = 'mc-amber' %}{% set er_mvc = 'mv-amber' %}
+{% else %}{% set er_cls = 'mc-green' %}{% set er_mvc = 'mv-green' %}{% endif %}
+
+{# ── Open incidents color ── #}
+{% if stats.open_incidents > 0 %}{% set inc_cls = 'mc-red' %}{% set inc_mvc = 'mv-red' %}
+{% else %}{% set inc_cls = 'mc-green' %}{% set inc_mvc = 'mv-green' %}{% endif %}
+
+
+<!-- ═══ Metric strip ════════════════════════════════════════════════════════ -->
+<div class="metric-strip">
+
+  <div class="metric-card mc-neutral">
+    <div class="metric-label">Events / 24h</div>
+    <div class="metric-value">{{ stats.total_events_24h | int }}</div>
+    <div class="metric-sub">all types</div>
+  </div>
+
+  <div class="metric-card {{ er_cls }}">
+    <div class="metric-label">Error Rate / 1h</div>
+    <div class="metric-value {{ er_mvc }}">{{ stats.error_rate }}%</div>
+    <div class="metric-sub">of all requests</div>
+  </div>
+
+  <div class="metric-card {{ inc_cls }}">
+    <div class="metric-label">Open Incidents</div>
+    <div class="metric-value {{ inc_mvc }}">{{ stats.open_incidents }}</div>
+    <div class="metric-sub">{% if stats.open_incidents == 0 %}all clear{% else %}needs attention{% endif %}</div>
+  </div>
+
+  <div class="metric-card {{ smc }}">
+    <div class="metric-label">Health Score</div>
+    <div class="metric-value {{ mvc }}">{% if score is not none %}{{ score }}{% else %}—{% endif %}</div>
+    <div class="metric-sub">{{ smsg }}{% if digest %} · {{ digest.date.strftime('%b %-d') }}{% endif %}</div>
+  </div>
+
+</div>
+
+
+<!-- ═══ Main two-column ══════════════════════════════════════════════════════ -->
+<div class="ov-main">
+
+  <!-- Left column: chart + live stream -->
+  <div class="ov-left">
+
+    <!-- Chart -->
+    <div class="chart-panel">
+      <div class="sh">
+        <span class="sh-title">Event Rate — last 30 min</span>
+        <span class="panel-count" id="chart-status">loading…</span>
+      </div>
+      <div class="chart-inner">
+        <canvas id="eventChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Live event stream -->
+    <div class="stream-panel">
+      <div class="sh">
+        <span class="sh-title">Live Events</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="panel-count" id="feed-count">—</span>
+          <a href="/live" class="sh-link" style="display:flex;align-items:center;gap:4px">
+            <span class="live-dot" style="width:5px;height:5px"></span> View all
+          </a>
+        </div>
+      </div>
+      <div id="event-feed">
+        {% for e in recent_events[:8] %}
+        <div class="stream-row">
+          <span class="st-badge b-{{ e.event_type.value }}">{{ e.event_type.value }}</span>
+          <span class="st-detail">
+            {% if e.event_type.value == 'error' %}{{ e.raw_data.get('exception_type','Error') }}
+            {% else %}{{ e.raw_data.get('method','GET') }} {{ e.raw_data.get('endpoint','/') }}{% endif %}
+          </span>
+          <span class="st-svc">{{ e.service or '—' }}</span>
+          <span class="st-time">{{ e.timestamp.strftime('%H:%M:%S') }}</span>
+        </div>
+        {% else %}
+        <div class="empty-inline">No events yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right column: incidents + deployments -->
+  <div class="ov-right">
+
+    <div class="sh">
+      <span class="sh-title">Incidents</span>
+      <a href="/incidents" class="sh-link">View all →</a>
+    </div>
+
+    <div style="min-height:132px;">
+    {% if recent_incidents %}
+      {% for inc in recent_incidents[:3] %}
+      {% set sev = inc.severity.value if inc.severity else 'unknown' %}
+      {% set dot_cls = {'critical':'c','high':'h','medium':'m','low':'l'}.get(sev, 'u') %}
+      <a class="inc-row" href="/incidents/{{ inc.id }}">
+        <div class="inc-dot {{ dot_cls }}"></div>
+        <div class="inc-body">
+          <div class="inc-title">{{ inc.title or 'Anomaly detected' }}</div>
+          <div class="inc-meta">{{ inc.detected_at.strftime('%b %d %H:%M') }} · {{ "%.1f"|format(inc.spike_ratio) }}×</div>
+        </div>
+        <span class="inc-status is-{{ inc.status.value }}">{{ inc.status.value }}</span>
+      </a>
+      {% endfor %}
+    {% else %}
+      <div class="empty-inline">
+        <div style="font-size:18px;opacity:0.15;margin-bottom:6px">✓</div>
+        No incidents
+      </div>
+    {% endif %}
+    </div>
+
+    <hr class="rc-divider">
+
+    <div class="sh">
+      <span class="sh-title">Deployments</span>
+      <a href="/deployments" class="sh-link">View all →</a>
+    </div>
+
+    <div style="min-height:102px;">
+    {% if recent_deployments %}
+      {% for dep in recent_deployments[:3] %}
+      {% set dd = dep.raw_data %}
+      <div class="dep-row">
+        <span class="dep-sha">{{ (dd.get('commit_sha') or '?')[:7] }}</span>
+        <span class="dep-branch">{{ dd.get('branch', '?') }}</span>
+        <span class="dep-time">{{ dep.timestamp.strftime('%b %d %H:%M') }}</span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-inline">
+        <div style="font-size:18px;opacity:0.15;margin-bottom:6px">⬆</div>
+        No deployments
+      </div>
+    {% endif %}
+    </div>
+
+    <!-- Daily report fills remaining right-column space -->
+    <hr class="rc-divider">
+    <div class="sh">
+      <span class="sh-title">Daily Report</span>
+      {% if digest %}<span style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">{{ digest.date.strftime('%b %-d') }}</span>{% endif %}
+    </div>
+    <div style="padding:14px 16px;flex:1;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="rr {{ scls }}" style="width:36px;height:36px;font-size:12px;">{% if score is not none %}{{ score }}{% else %}—{% endif %}</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);">{{ smsg }}</div>
+          <div style="font-size:10px;color:var(--text-3);">{% if score is not none %}health score{% else %}no report yet{% endif %}</div>
+        </div>
+      </div>
+      {% if digest and digest.summary %}
+        <p style="font-size:12px;color:var(--text-2);line-height:1.65;margin:0;">{{ digest.summary[:200] }}{% if digest.summary|length > 200 %}…{% endif %}</p>
+      {% else %}
+        <p style="font-size:12px;color:var(--text-3);line-height:1.65;margin:0;">Daily report generates overnight. Check back tomorrow morning.</p>
+      {% endif %}
+      <a href="/digest" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:500;margin-top:auto;display:inline-flex;align-items:center;gap:4px;">
+        Full report
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5h6M5 2l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </div>
+
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const ctx = document.getElementById('eventChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: 'Errors',
+        data: [],
+        borderColor: '#f87171',
+        backgroundColor: 'rgba(248,113,113,0.06)',
+        borderWidth: 1.5, pointRadius: 0, tension: 0.35, fill: true,
+      },
+      {
+        label: 'Traces',
+        data: [],
+        borderColor: '#60a5fa',
+        backgroundColor: 'rgba(96,165,250,0.05)',
+        borderWidth: 1.5, pointRadius: 0, tension: 0.35, fill: true,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 200 },
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: '#4c5668', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 8, padding: 14 } },
+      tooltip: {
+        backgroundColor: '#111420', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1,
+        titleColor: '#dce3f0', bodyColor: '#8892a4',
+        titleFont: { family: 'JetBrains Mono', size: 11 },
+        bodyFont:  { family: 'JetBrains Mono', size: 11 },
+        padding: 10,
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#4c5668', font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'rgba(255,255,255,0.05)' } },
+      y: { beginAtZero: true, ticks: { color: '#4c5668', font: { family: 'JetBrains Mono', size: 9 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'rgba(255,255,255,0.05)' } }
+    }
+  }
+});
+
+let deploymentBuckets = [];
+Chart.register({
+  id: 'deployLines',
+  afterDraw(chart) {
+    const { ctx, scales: { x, y } } = chart;
+    deploymentBuckets.forEach(bucket => {
+      const idx = chart.data.labels.indexOf(bucket);
+      if (idx === -1) return;
+      const xPos = x.getPixelForValue(idx);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(129,140,248,0.4)';
+      ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(xPos, y.top); ctx.lineTo(xPos, y.bottom); ctx.stroke();
+      ctx.fillStyle = 'rgba(129,140,248,0.7)';
+      ctx.font = '9px JetBrains Mono';
+      ctx.fillText('deploy', xPos + 4, y.top + 10);
+      ctx.restore();
+    });
+  }
+});
+
+async function refreshChart() {
+  try {
+    const res  = await fetch('/api/metrics');
+    const data = await res.json();
+    chart.data.labels           = data.labels;
+    chart.data.datasets[0].data = data.errors;
+    chart.data.datasets[1].data = data.traces;
+    deploymentBuckets = data.deployments || [];
+    chart.update('none');
+    const total = data.errors.reduce((a,b)=>a+b,0) + data.traces.reduce((a,b)=>a+b,0);
+    document.getElementById('chart-status').textContent = `${total} events`;
+  } catch(e) { console.error('chart poll failed', e); }
+}
+
+async function refreshFeed() {
+  try {
+    const res  = await fetch('/api/events/recent');
+    const data = await res.json();
+    if (!data.events || data.events.length === 0) return;
+    const shown = data.events.slice(0, 8);
+    document.getElementById('feed-count').textContent = `${shown.length} recent`;
+    document.getElementById('event-feed').innerHTML = shown.map(e => `
+      <div class="stream-row">
+        <span class="st-badge b-${e.type}">${e.type}</span>
+        <span class="st-detail">${e.detail}</span>
+        <span class="st-svc">${e.service}</span>
+        <span class="st-time">${e.timestamp}</span>
+      </div>
+    `).join('');
+  } catch(e) { console.error('feed poll failed', e); }
+}
+
+refreshChart();
+refreshFeed();
+setInterval(refreshChart, 10_000);
+setInterval(refreshFeed, 10_000);
+</script>
+{% endblock %}

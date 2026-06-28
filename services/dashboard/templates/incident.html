@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+{% block title %}— Incident{% endblock %}
+{% block topbar_title %}Incident Detail{% endblock %}
+
+{% block extra_styles %}
+
+.sim-card  { display:flex; align-items:flex-start; gap:14px; padding:14px 18px; border-bottom:1px solid var(--border); text-decoration:none; transition:background 0.1s; }
+.sim-card:last-child { border-bottom:none; }
+.sim-card:hover { background:var(--bg-3); }
+.sim-score {
+  flex-shrink:0; width:48px; height:48px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-mono); font-size:12px; font-weight:700; border:2px solid;
+}
+.sim-score.high   { border-color:var(--red);   color:var(--red);   background:var(--red-dim); }
+.sim-score.medium { border-color:var(--amber); color:var(--amber); background:var(--amber-dim); }
+.sim-score.low    { border-color:var(--blue);  color:var(--blue);  background:var(--blue-dim); }
+.sim-body   { flex:1; min-width:0; }
+.sim-title  { font-size:13px; font-weight:500; color:var(--text); margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sim-root   { font-size:11px; color:var(--text-3); line-height:1.5; margin-bottom:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.sim-meta   { display:flex; gap:10px; font-size:11px; color:var(--text-3); font-family:var(--font-mono); }
+.sim-actions { margin-top:6px; font-size:11px; color:var(--text-2); line-height:1.5; }
+.sim-actions strong { color:var(--accent); font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:0.07em; display:block; margin-bottom:2px; }
+
+.recurrence-banner { display:flex; align-items:flex-start; gap:10px; padding:12px 16px; background:var(--amber-dim); border:1px solid rgba(251,191,36,0.22); border-radius:var(--radius); margin-bottom:16px; }
+.recurrence-icon   { font-size:16px; flex-shrink:0; }
+.recurrence-text   { font-size:13px; color:var(--text-2); line-height:1.6; }
+.recurrence-text strong { color:var(--amber); }
+
+.back-link { display:inline-flex; align-items:center; gap:6px; color:var(--text-3); text-decoration:none; font-size:12px; margin-bottom:20px; transition:color 0.15s; font-weight:500; }
+.back-link:hover { color:var(--text); }
+
+.incident-hero { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:24px 28px; margin-bottom:20px; position:relative; overflow:hidden; }
+.incident-hero::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; }
+.incident-hero.critical::before { background:var(--red); }
+.incident-hero.high::before     { background:var(--amber); }
+.incident-hero.medium::before   { background:var(--blue); }
+.incident-hero.low::before      { background:var(--text-3); }
+.hero-badges  { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+.hero-title   { font-size:20px; font-weight:700; color:var(--text); line-height:1.2; letter-spacing:-0.3px; }
+.hero-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:18px; padding-top:18px; border-top:1px solid var(--border); }
+.hero-metric-label { font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:5px; font-weight:600; }
+.hero-metric-value { font-size:20px; font-weight:700; font-family:var(--font-mono); color:var(--text); letter-spacing:-0.5px; }
+
+.analysis-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+.analysis-card { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+.analysis-card-full { grid-column:1/-1; }
+.analysis-header { padding:12px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+.analysis-icon  { font-size:12px; color:var(--text-3); }
+.analysis-title { font-size:12px; font-weight:600; color:var(--text); }
+.analysis-body  { padding:16px 18px; font-size:13px; color:var(--text-2); line-height:1.7; }
+
+.deploy-corr      { display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--amber-dim); border:1px solid rgba(251,191,36,0.2); border-radius:var(--radius); margin-bottom:8px; }
+.deploy-corr.no-corr { background:var(--bg-3); border-color:var(--border); }
+.deploy-corr-icon { font-size:15px; }
+.deploy-corr-text { font-size:13px; color:var(--text-2); flex:1; }
+.deploy-corr-commit { font-family:var(--font-mono); font-size:11px; color:var(--accent); background:var(--accent-dim); padding:2px 8px; border-radius:4px; }
+
+.action-list { list-style:none; }
+.action-item { display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; color:var(--text-2); line-height:1.5; }
+.action-item:last-child { border-bottom:none; }
+.action-num  { width:20px; height:20px; border-radius:50%; background:var(--accent-dim); border:1px solid rgba(129,140,248,0.25); display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--accent); flex-shrink:0; font-weight:700; }
+
+.endpoint-chip { display:inline-block; font-size:11px; font-family:var(--font-mono); background:var(--bg-3); border:1px solid var(--border-2); border-radius:4px; padding:3px 9px; color:var(--text-2); margin:3px 3px 3px 0; }
+
+.error-table    { width:100%; border-collapse:collapse; font-size:12px; }
+.error-table th { text-align:left; padding:8px 14px; font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.1em; border-bottom:1px solid var(--border); font-weight:600; }
+.error-table td { padding:9px 14px; border-bottom:1px solid var(--border); color:var(--text-2); vertical-align:top; }
+.error-table tr:last-child td { border-bottom:none; }
+.error-table tr:hover td { background:var(--bg-3); }
+.stack-preview  { font-size:10px; color:var(--text-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:300px; font-family:var(--font-mono); }
+
+.ai-badge        { display:inline-flex; align-items:center; gap:5px; font-size:10px; color:var(--accent); background:var(--accent-dim); border-radius:20px; padding:3px 9px; font-weight:600; letter-spacing:0.04em; }
+.ai-badge.failed { color:var(--text-3); background:var(--bg-3); }
+
+.resolve-btn {
+  margin-left:auto;
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:11px; font-weight:600; font-family:var(--font-sans);
+  color:#fff; background:rgba(34,197,94,0.18);
+  border:1px solid rgba(34,197,94,0.35);
+  border-radius:var(--radius); padding:5px 14px;
+  cursor:pointer; transition:background 0.15s, opacity 0.15s;
+  letter-spacing:0.03em;
+}
+.resolve-btn:hover   { background:rgba(34,197,94,0.30); }
+.resolve-btn:active  { opacity:0.8; }
+.resolve-btn:disabled { opacity:0.4; cursor:default; }
+
+{% endblock %}
+
+{% block content %}
+<a class="back-link" href="/?project_id={{ project.id }}">← back to dashboard</a>
+
+<!-- Hero -->
+<div class="incident-hero {{ incident.severity.value if incident.severity else 'low' }}">
+  <div class="hero-badges">
+    {% if incident.severity %}
+    <span class="sev-badge {{ incident.severity.value }}">{{ incident.severity.value }}</span>
+    {% endif %}
+    <span class="incident-status-badge status-{{ incident.status.value }}" id="status-badge">{{ incident.status.value }}</span>
+    {% if incident.ai_analyzed %}
+    <span class="ai-badge">◈ AI Analyzed</span>
+    {% else %}
+    <span class="ai-badge failed">Analysis pending</span>
+    {% endif %}
+    {% if incident.status.value != 'resolved' %}
+    <button class="resolve-btn" id="resolve-btn" onclick="resolveIncident('{{ incident.id }}')">
+      ✓ Mark resolved
+    </button>
+    {% endif %}
+  </div>
+  <div class="hero-title">{{ incident.title or 'Anomaly Detected' }}</div>
+  <div class="hero-metrics">
+    <div>
+      <div class="hero-metric-label">Detected at</div>
+      <div class="hero-metric-value" style="font-size:15px">{{ incident.detected_at.strftime('%H:%M:%S') }}</div>
+      <div class="stat-sub">{{ incident.detected_at.strftime('%b %d, %Y') }}</div>
+    </div>
+    <div>
+      <div class="hero-metric-label">Error count</div>
+      <div class="hero-metric-value" style="color:var(--red)">{{ incident.current_errors }}</div>
+      <div class="stat-sub">in detected window</div>
+    </div>
+    <div>
+      <div class="hero-metric-label">Baseline avg</div>
+      <div class="hero-metric-value">{{ incident.baseline_avg }}</div>
+      <div class="stat-sub">errors / min normal</div>
+    </div>
+    <div>
+      <div class="hero-metric-label">Spike ratio</div>
+      <div class="hero-metric-value" style="color:var(--amber)">{{ incident.spike_ratio }}×</div>
+      <div class="stat-sub">above baseline</div>
+    </div>
+  </div>
+</div>
+
+<!-- AI analysis -->
+{% if analysis %}
+<div class="analysis-grid">
+
+  <div class="analysis-card analysis-card-full">
+    <div class="analysis-header">
+      <span class="analysis-icon">◎</span>
+      <span class="analysis-title">Root Cause Hypothesis</span>
+    </div>
+    <div class="analysis-body">
+      {{ analysis.get('root_cause_hypothesis', 'No analysis available.') }}
+      {% if analysis.get('evidence') %}
+      <div style="margin-top:12px; padding:10px 14px; background:var(--bg-3); border-radius:var(--radius); border-left:3px solid var(--blue); font-size:12px; color:var(--text-3);">
+        <strong style="color:var(--text-2); font-size:10px; text-transform:uppercase; letter-spacing:0.1em;">Evidence</strong>
+        <span style="margin-top:4px; display:block">{{ analysis.get('evidence') }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="analysis-card">
+    <div class="analysis-header">
+      <span class="analysis-icon">⬡</span>
+      <span class="analysis-title">Deployment Correlation</span>
+    </div>
+    <div class="analysis-body">
+      <div class="deploy-corr {% if not analysis.get('deployment_correlated') %}no-corr{% endif %}">
+        <span class="deploy-corr-icon">{% if analysis.get('deployment_correlated') %}⚠{% else %}✓{% endif %}</span>
+        <span class="deploy-corr-text">
+          {% if analysis.get('deployment_correlated') %}
+            Deployment likely triggered this incident.
+          {% else %}
+            No deployment correlation found.
+          {% endif %}
+        </span>
+        {% if deployment_event %}
+        <span class="deploy-corr-commit">{{ deployment_event.raw_data.get('commit_sha','?')[:7] }}</span>
+        {% endif %}
+      </div>
+      {% if analysis.get('deployment_explanation') %}
+      <div style="margin-top:10px; font-size:13px; color:var(--text-2);">{{ analysis.get('deployment_explanation') }}</div>
+      {% endif %}
+      {% if deployment_event %}
+      <div style="margin-top:12px; background:var(--bg-3); border-radius:var(--radius); padding:10px 14px; font-size:12px;">
+        <div style="color:var(--text-3); margin-bottom:5px; font-size:10px; text-transform:uppercase; letter-spacing:0.1em; font-weight:600;">Correlated deployment</div>
+        <div style="color:var(--accent); font-family:var(--font-mono)">{{ deployment_event.raw_data.get('commit_sha','?') }}</div>
+        <div style="color:var(--text-2); margin-top:3px">{{ deployment_event.raw_data.get('commit_message','')[:100] }}</div>
+        <div style="color:var(--text-3); margin-top:3px; font-family:var(--font-mono); font-size:11px">{{ deployment_event.raw_data.get('branch','?') }} · {{ deployment_event.raw_data.get('pusher','?') }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="analysis-card">
+    <div class="analysis-header">
+      <span class="analysis-icon">▶</span>
+      <span class="analysis-title">Recommended Actions</span>
+    </div>
+    <div class="analysis-body">
+      {% if analysis.get('recommended_actions') %}
+      <ol class="action-list">
+        {% for action in analysis.get('recommended_actions', []) %}
+        <li class="action-item">
+          <span class="action-num">{{ loop.index }}</span>
+          {{ action }}
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <span class="text-dim">No actions generated.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if analysis.get('affected_endpoints') %}
+  <div class="analysis-card analysis-card-full">
+    <div class="analysis-header">
+      <span class="analysis-icon">◉</span>
+      <span class="analysis-title">Affected Endpoints</span>
+    </div>
+    <div class="analysis-body">
+      {% for ep in analysis.get('affected_endpoints', []) %}
+      <span class="endpoint-chip">{{ ep }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+<!-- Recurrence -->
+{% if analysis and analysis.get('recurrence_note') %}
+<div class="recurrence-banner">
+  <span class="recurrence-icon">⟳</span>
+  <div class="recurrence-text"><strong>Recurring issue detected</strong><br>{{ analysis.get('recurrence_note') }}</div>
+</div>
+{% endif %}
+
+<!-- Similar incidents -->
+{% if similar_incidents %}
+<div class="analysis-card" style="margin-bottom:20px">
+  <div class="analysis-header">
+    <span class="analysis-icon">◈</span>
+    <span class="analysis-title">Similar Past Incidents</span>
+    <span style="margin-left:auto; font-size:11px; color:var(--text-3)">semantic similarity · this project</span>
+  </div>
+  <div class="panel-body">
+    {% for sim in similar_incidents %}
+    {% set score_pct = (sim.similarity_score * 100) | int %}
+    {% set score_class = 'high' if score_pct >= 90 else ('medium' if score_pct >= 85 else 'low') %}
+    <a class="sim-card" href="/incidents/{{ sim.id }}?project_id={{ project.id }}">
+      <div class="sim-score {{ score_class }}">{{ score_pct }}%</div>
+      <div class="sim-body">
+        <div class="sim-title">{{ sim.title }}</div>
+        <div class="sim-root">{{ sim.root_cause }}</div>
+        <div class="sim-meta">
+          <span>{{ sim.detected_at.strftime('%b %d, %Y') }}</span>
+          {% if sim.severity %}<span>{{ sim.severity }}</span>{% endif %}
+        </div>
+        {% if sim.recommended_actions %}
+        <div class="sim-actions">
+          <strong>what was recommended</strong>
+          {{ sim.recommended_actions[0] }}{% if sim.recommended_actions|length > 1 %} · {{ sim.recommended_actions[1] }}{% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Sample errors -->
+{% if sample_errors %}
+<div class="analysis-card" style="margin-bottom:20px">
+  <div class="analysis-header">
+    <span class="analysis-icon">✕</span>
+    <span class="analysis-title">Error Samples — 30 min window</span>
+  </div>
+  <div class="panel-body">
+    <table class="error-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Exception</th>
+          <th>Message</th>
+          <th>Endpoint</th>
+          <th>Stack (preview)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in sample_errors %}
+        <tr>
+          <td class="nowrap text-dim mono">{{ e.timestamp.strftime('%H:%M:%S') }}</td>
+          <td style="color:var(--red); white-space:nowrap">{{ e.raw_data.get('exception_type','?') }}</td>
+          <td>{{ e.raw_data.get('message','')[:60] }}</td>
+          <td class="nowrap" style="color:var(--blue); font-family:var(--font-mono)">{{ e.raw_data.get('method','') }} {{ e.raw_data.get('endpoint','') }}</td>
+          <td><div class="stack-preview">{{ e.raw_data.get('stack_trace','—') }}</div></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function resolveIncident(incidentId) {
+  const btn   = document.getElementById('resolve-btn');
+  const badge = document.getElementById('status-badge');
+  if (!btn || btn.disabled) return;
+
+  btn.disabled    = true;
+  btn.textContent = 'Resolving…';
+
+  try {
+    const res = await fetch(`/api/incidents/${incidentId}/resolve`, { method: 'POST' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    badge.textContent = 'resolved';
+    badge.className   = 'incident-status-badge status-resolved';
+    btn.remove();
+  } catch (e) {
+    btn.disabled    = false;
+    btn.textContent = '✓ Mark resolved';
+    console.error('Resolve failed:', e);
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=71", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "engram-sdk"
+version = "0.1.0"
+description = "Engram SDK — drop-in observability for Python apps"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27.0",       # async-friendly HTTP client for sending events
+    "starlette>=0.37.0",   # BaseHTTPMiddleware for FastAPI support
+]
+
+[project.optional-dependencies]
+flask = ["flask>=3.0.0"]   # only needed when using Flask middleware
+dev   = ["pytest", "pytest-asyncio", "httpx", "fastapi", "uvicorn", "flask"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["engram_sdk*"]

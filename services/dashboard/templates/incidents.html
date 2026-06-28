@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}— Incidents{% endblock %}
+{% block topbar_title %}Incidents{% endblock %}
+
+{% block extra_styles %}
+.filter-bar {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 20px;
+}
+.filter-btn {
+  padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border-2); background: var(--bg-2); color: var(--text-2);
+  text-decoration: none; transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.filter-btn:hover   { background: var(--bg-3); color: var(--text); }
+.filter-btn.active  { background: var(--accent-dim); border-color: rgba(129,140,248,0.35); color: var(--accent); }
+
+.inc-table { width: 100%; border-collapse: collapse; }
+.inc-table th {
+  text-align: left; font-size: 11px; font-weight: 600; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 0 16px 10px; border-bottom: 1px solid var(--border);
+}
+.inc-table th:first-child { padding-left: 18px; }
+.inc-row td {
+  padding: 13px 16px; border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.inc-row td:first-child { padding-left: 18px; }
+.inc-row:last-child td  { border-bottom: none; }
+.inc-row:hover td       { background: var(--bg-3); }
+
+.inc-title-cell { display: flex; align-items: center; gap: 10px; }
+.inc-title-link {
+  color: var(--text); font-size: 13px; font-weight: 500;
+  text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 460px; display: block;
+}
+.inc-title-link:hover { color: var(--accent); }
+
+.spike-bar-wrap { width: 80px; }
+.spike-bar-track { height: 4px; background: var(--bg-4); border-radius: 2px; overflow: hidden; }
+.spike-bar-fill  { height: 4px; border-radius: 2px; background: var(--accent); }
+
+.mono-sm { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+{% endblock %}
+
+{% block content %}
+<div class="filter-bar">
+  <a href="/incidents" class="filter-btn {% if not status_filter %}active{% endif %}">All</a>
+  <a href="/incidents?status=open"          class="filter-btn {% if status_filter == 'open' %}active{% endif %}">Open</a>
+  <a href="/incidents?status=investigating" class="filter-btn {% if status_filter == 'investigating' %}active{% endif %}">Investigating</a>
+  <a href="/incidents?status=resolved"      class="filter-btn {% if status_filter == 'resolved' %}active{% endif %}">Resolved</a>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">All Incidents</span>
+    <span class="panel-count">{{ incidents|length }}</span>
+  </div>
+  <div class="panel-body">
+    {% if incidents %}
+    <table class="inc-table">
+      <thead>
+        <tr>
+          <th style="width:44%">Incident</th>
+          <th>Severity</th>
+          <th>Status</th>
+          <th>Spike</th>
+          <th>Detected</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inc in incidents %}
+        <tr class="inc-row">
+          <td>
+            <div class="inc-title-cell">
+              <div class="sev-bar sev-{{ inc.severity.value if inc.severity else 'unknown' }}"></div>
+              <a href="/incidents/{{ inc.id }}" class="inc-title-link">
+                {{ inc.title or 'Untitled incident' }}
+              </a>
+            </div>
+          </td>
+          <td>
+            <span class="sev-badge {{ inc.severity.value if inc.severity else 'low' }}">
+              {{ inc.severity.value if inc.severity else '—' }}
+            </span>
+          </td>
+          <td>
+            <span class="incident-status-badge status-{{ inc.status.value }}">
+              {{ inc.status.value }}
+            </span>
+          </td>
+          <td>
+            <div class="spike-bar-wrap">
+              <div class="mono-sm" style="margin-bottom:4px">{{ "%.1f"|format(inc.spike_ratio) }}×</div>
+              <div class="spike-bar-track">
+                <div class="spike-bar-fill" style="width: {{ [inc.spike_ratio / 20 * 100, 100]|min }}%"></div>
+              </div>
+            </div>
+          </td>
+          <td class="mono-sm nowrap">{{ inc.detected_at.strftime('%b %d, %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">◎</div>
+      {% if status_filter %}No {{ status_filter }} incidents.{% else %}No incidents yet — things are looking good.{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
