@@ -172,7 +172,15 @@ Each project gets its own API key and isolated dashboard view.
 
 The detector fires when error rate spikes to **1.5× the baseline average** within a 1-minute window. Baseline is calculated from the previous 4 minutes of activity.
 
-The included example app makes this easy to test:
+### Option A — trigger script (quickest)
+
+```bash
+python tests/trigger_incident.py --api-key pk_live_...
+```
+
+The script sends 5 baseline errors, waits for the minute to roll over, then fires 20 errors in the new window — enough to trip the 1.5× threshold. It then waits up to 90 seconds and tells you to check the dashboard.
+
+### Option B — example app + curl
 
 ```bash
 export ENGRAM_API_KEY="pk_live_..."
@@ -270,6 +278,12 @@ Engram/
 │   ├── ai/                    Kafka consumer — Claude incident analysis + daily digests
 │   └── dashboard/             FastAPI + Jinja2 — read-only dashboard UI
 ├── sdk/                       Python SDK (FastAPI + Flask auto-instrumentation)
+├── tests/
+│   ├── trigger_incident.py    Manual incident trigger script (dev/demo)
+│   ├── test_anomaly.py
+│   ├── test_auth.py
+│   ├── test_ingestor_api.py
+│   └── test_otel_normalizer.py
 ├── docker-compose.yml
 ├── otel-collector-config.yaml
 ├── .env.example
