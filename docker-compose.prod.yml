@@ -1,0 +1,35 @@
+# Production overrides — used alongside docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# What this does vs dev:
+#   - Closes off debug ports (Postgres 5432, Redis 6379, Kafka 9094)
+#   - Adds restart policies to Zookeeper and Kafka
+#   - Raises resource limits for Kafka and Postgres
+
+services:
+
+  kafka:
+    ports: !reset []          # remove the 9094 external port — not needed publicly
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1536M
+
+  postgres:
+    restart: unless-stopped
+    ports: !reset []          # never expose Postgres publicly
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  redis:
+    restart: unless-stopped
+    ports: !reset []          # never expose Redis publicly
+
+  otel-collector:
+    ports:
+      - "4318:4318"           # HTTP OTel — proxied through Caddy with TLS
+      # 4317 (gRPC) intentionally not exposed — use HTTPS/4318 in production

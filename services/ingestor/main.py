@@ -47,11 +47,11 @@ def get_producer():
 # ── Ingest schemas ─────────────────────────────────────────────────────────────
 
 class ErrorEventData(BaseModel):
-    exception_type: str
-    message: str
-    stack_trace: Optional[str] = None
-    endpoint: Optional[str] = None
-    method: Optional[str] = None
+    exception_type: str                                  = Field(max_length=256)
+    message:        str                                  = Field(max_length=1024)
+    stack_trace:    Optional[str]                        = Field(default=None, max_length=8192)
+    endpoint:       Optional[str]                        = Field(default=None, max_length=512)
+    method:         Optional[str]                        = Field(default=None, max_length=16)
 
 class TraceEventData(BaseModel):
     endpoint: str
@@ -118,7 +118,7 @@ limiter = Limiter(key_func=_rate_limit_key)
 
 # ── App ────────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Engram Admin API", version="0.3.0")
+app = FastAPI(title="Engram Admin API", version="0.3.0", docs_url=None, redoc_url=None)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(webhooks_router)
@@ -138,8 +138,16 @@ def _check_kafka() -> str:
         return "error"
 
 
-@app.get("/health", response_model=HealthResponse, tags=["meta"])
-def health(db: Session = Depends(get_db)) -> HealthResponse:
+@app.get("/health", tags=["meta"])
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/internal/health", response_model=HealthResponse, tags=["meta"])
+def health_internal(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+) -> HealthResponse:
     db_status = "ok"
     try:
         db.execute(text("SELECT 1"))

@@ -128,10 +128,16 @@ def _send_email(incident_id: str, title: str, severity: Optional[str],
     if not recipients:
         return
 
+    import html as _html
     severity    = severity or "unknown"
     colour      = _SLACK_COLOURS.get(severity, "#8c9099")
-    recurrence  = f"<p><strong>⟳ Recurring issue:</strong> {recurrence_note}</p>" if recurrence_note else ""
-    actions_html = "".join(f"<li>{a}</li>" for a in (actions or []))
+    safe_title      = _html.escape(title)
+    safe_root_cause = _html.escape(root_cause)
+    safe_recurrence = _html.escape(recurrence_note) if recurrence_note else None
+    safe_actions    = [_html.escape(a) for a in (actions or [])]
+
+    recurrence   = f"<p><strong>⟳ Recurring issue:</strong> {safe_recurrence}</p>" if safe_recurrence else ""
+    actions_html = "".join(f"<li>{a}</li>" for a in safe_actions)
 
     html = f"""
 <!DOCTYPE html>
@@ -142,17 +148,17 @@ def _send_email(incident_id: str, title: str, severity: Optional[str],
     <div style="background: {colour}; padding: 4px 0;"></div>
     <div style="padding: 24px 28px;">
       <h2 style="margin: 0 0 8px; color: #1a1a1a;">
-        [{severity.upper()}] {title}
+        [{_html.escape(severity.upper())}] {safe_title}
       </h2>
       <p style="color: #555; font-size: 13px; margin: 0 0 20px;">
-        Engram detected an anomaly — {spike_ratio}× above your error baseline.
+        Engram detected an anomaly — {_html.escape(str(spike_ratio))}× above your error baseline.
       </p>
       <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 20px;">
-      <p><strong>Root cause:</strong> {root_cause}</p>
+      <p><strong>Root cause:</strong> {safe_root_cause}</p>
       {recurrence}
       {"<p><strong>Recommended actions:</strong></p><ul>" + actions_html + "</ul>" if actions_html else ""}
       <div style="margin-top: 24px;">
-        <a href="{dashboard_url}"
+        <a href="{_html.escape(dashboard_url)}"
            style="background: #0f6e56; color: #fff; padding: 10px 20px;
                   border-radius: 6px; text-decoration: none; font-size: 13px;">
           View Incident →

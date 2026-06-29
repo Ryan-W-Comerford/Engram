@@ -1,0 +1,31 @@
+# Replace yourdomain.com with your actual domain.
+# Caddy automatically provisions and renews TLS via Let's Encrypt.
+
+(security_headers) {
+    header {
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'"
+        -Server
+    }
+}
+
+# Dashboard UI
+dashboard.yourdomain.com {
+    import security_headers
+    reverse_proxy localhost:8080
+}
+
+# Ingestor API + webhooks
+ingestor.yourdomain.com {
+    import security_headers
+    reverse_proxy localhost:8000
+}
+
+# OTel HTTP exporter — SDK clients use this over HTTPS
+# gRPC (port 4317) not exposed publicly; use HTTP/4318 in production
+otel.yourdomain.com {
+    reverse_proxy localhost:4318
+}

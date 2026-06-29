@@ -19,6 +19,7 @@ import signal
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 
 from confluent_kafka import Consumer, KafkaError, KafkaException, Producer
 
@@ -50,7 +51,7 @@ def _send_to_dlq(producer: Producer, raw_bytes: bytes, error: str) -> None:
 
 def _digest_loop() -> None:
     """Run daily at 00:05 UTC; generate yesterday's digest for all projects that lack one."""
-    from datetime import timedelta, timezone as _tz
+    from datetime import timedelta
     while True:
         try:
             run_daily_digests()

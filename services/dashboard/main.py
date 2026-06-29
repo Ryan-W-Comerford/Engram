@@ -13,6 +13,9 @@ from fastapi import Body, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
@@ -33,7 +36,10 @@ from auth import (
 setup_logging("dashboard")
 logger = logging.getLogger(__name__)
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Engram Dashboard", docs_url=None, redoc_url=None)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 BASE_DIR      = os.path.dirname(__file__)
 templates     = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
@@ -61,6 +67,7 @@ def login_page(request: Request, error: Optional[str] = Query(None)):
 
 
 @app.post("/login")
+@limiter.limit("10/minute")
 def login_post(
     request: Request,
     api_key: str = Form(...),
@@ -90,7 +97,7 @@ def login_post(
     return response
 
 
-@app.get("/logout")
+@app.post("/logout")
 def logout():
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie(SESSION_COOKIE)
@@ -489,36 +496,6 @@ def api_events_stream(
     }
 
 
-@app.post("/api/test/trigger-incident")
-def api_trigger_test_incident(
-    db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
-):
-    """
-    Directly creates a test incident in the DB without going through Kafka.
-    Useful for verifying the UI when the Kafka pipeline is unavailable.
-    """
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-
-    incident = Incident(
-        id=uuid.uuid4(),
-        project_id=project.id,
-        detected_at=now,
-        current_errors=25,
-        baseline_avg=4.0,
-        spike_ratio=6.25,
-        status=IncidentStatus.OPEN,
-        severity=Severity.HIGH,
-        title="[Test] Error spike detected — DatabaseTimeoutError (6.25× baseline)",
-        ai_summary=None,
-        ai_analyzed=False,
-        created_at=now,
-    )
-    db.add(incident)
-    db.commit()
-    db.refresh(incident)
-    logger.info(f"Test incident created | id={incident.id} project={project.name}")
-    return {"incident_id": str(incident.id), "status": "created"}
 
 
 @app.get("/api/events/recent")

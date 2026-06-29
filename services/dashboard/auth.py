@@ -34,7 +34,7 @@ from shared.db.session import get_db
 logger = logging.getLogger(__name__)
 
 SESSION_COOKIE  = "pulsession"
-SESSION_MAX_AGE = 60 * 60 * 24 * 30   # 30 days
+SESSION_MAX_AGE = 60 * 60 * 24         # 24 hours
 SECURE_COOKIES  = os.getenv("HTTPS", "").lower() in ("1", "true", "yes")
 
 _secret = os.getenv("DASHBOARD_SECRET_KEY", "")
