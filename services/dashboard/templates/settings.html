@@ -25,31 +25,6 @@
 {% block content %}
 {% if project %}
 
-<!-- GitHub Webhook -->
-<div class="settings-section">
-  <div class="settings-header">
-    <h2>GitHub Webhook</h2>
-    <p>Paste this URL into your repository webhook settings to track deployments</p>
-  </div>
-  <div class="settings-body">
-    <div class="field-label">Payload URL</div>
-    <div class="code-field">
-      <span class="code-val" id="webhook-url">{{ webhook_url }}</span>
-      <button class="copy-btn" onclick="copyTo('webhook-url', this)">Copy</button>
-    </div>
-    <p class="field-hint">
-      GitHub → Repository → Settings → Webhooks → Add webhook<br>
-      Set <strong style="color:var(--text-2)">Content type</strong> to <code style="color:var(--green); font-family:var(--font-mono)">application/json</code> · Select <strong style="color:var(--text-2)">Just the push event</strong>
-    </p>
-
-    <div class="field-label">Webhook Secret (recommended)</div>
-    <p class="field-hint">
-      Set <code style="color:var(--green); font-family:var(--font-mono)">GITHUB_WEBHOOK_SECRET</code> in your .env file and paste the same value into GitHub's "Secret" field.
-      Generate: <code style="color:var(--blue); font-family:var(--font-mono)">python -c "import secrets; print(secrets.token_hex(32))"</code>
-    </p>
-  </div>
-</div>
-
 <!-- SDK quickstart -->
 <div class="settings-section">
   <div class="settings-header">
@@ -62,13 +37,13 @@
 
     <div class="field-label" style="margin-top:18px">2 · Instrument (FastAPI)</div>
     <div class="code-block">
-<span class="kw">from</span> pulseai_sdk <span class="kw">import</span> Engram<br>
+<span class="kw">from</span> engram_sdk <span class="kw">import</span> Engram<br>
 <br>
 pulse = <span class="fn">Engram</span>(<br>
-&nbsp;&nbsp;&nbsp;&nbsp;api_key=<span class="st">"pk_live_…"</span>,  <span class="c"># use ENGRAM_API_KEY env var in prod</span><br>
 &nbsp;&nbsp;&nbsp;&nbsp;host=<span class="st">"{{ ingestor_host }}"</span>,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;environment=<span class="st">"production"</span>,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;service=<span class="st">"my-api"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c"># token=&quot;…&quot; only if this instance sets AUTH_TOKEN</span><br>
 )<br>
 pulse.<span class="fn">auto_instrument</span>(app)  <span class="c"># wraps FastAPI or Flask</span>
     </div>
@@ -79,11 +54,6 @@ pulse.<span class="fn">auto_instrument</span>(app)  <span class="c"># wraps Fast
 &nbsp;&nbsp;&nbsp;&nbsp;result = <span class="fn">call_external_api</span>()<br>
 <span class="kw">except</span> TimeoutError <span class="kw">as</span> e:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;pulse.<span class="fn">capture_error</span>(exception_type=<span class="st">"TimeoutError"</span>, message=<span class="fn">str</span>(e))
-    </div>
-
-    <div class="field-label" style="margin-top:18px">4 · Record a deployment from CI/CD</div>
-    <div class="code-block">
-pulse.<span class="fn">capture_deployment</span>(commit_sha=<span class="st">"a3f8c21"</span>, branch=<span class="st">"main"</span>, pusher=<span class="st">"ryan"</span>)
     </div>
   </div>
 </div>
@@ -100,29 +70,14 @@ pulse.<span class="fn">capture_deployment</span>(commit_sha=<span class="st">"a3
       <span class="code-val">{{ ingestor_host }}</span>
     </div>
 
-    <div class="field-label">Interactive docs</div>
-    <div class="code-field">
-      <span class="code-val" id="docs-url">{{ ingestor_host }}/docs</span>
-      <a href="{{ ingestor_host }}/docs" target="_blank" class="copy-btn">Open →</a>
-    </div>
-
     <p class="field-hint">
-      Authenticate all requests with <code style="color:var(--green); font-family:var(--font-mono)">X-API-Key: pk_live_…</code>
+      <code style="color:var(--green); font-family:var(--font-mono)">POST {{ ingestor_host }}/ingest</code> —
+      open by default. If this instance sets <code style="color:var(--green); font-family:var(--font-mono)">AUTH_TOKEN</code>,
+      add <code style="color:var(--green); font-family:var(--font-mono)">Authorization: Bearer &lt;AUTH_TOKEN&gt;</code>.
     </p>
   </div>
 </div>
 
-{% else %}
-<div style="padding:60px 0; text-align:center; color:var(--text-3)">
-  <div style="font-size:28px; margin-bottom:16px; opacity:0.25">◈</div>
-  No project found. Create one first:<br><br>
-  <div class="code-block" style="display:inline-block; text-align:left; padding:14px 20px">
-    curl -X POST {{ ingestor_host }}/projects \<br>
-    &nbsp;&nbsp;-H "Content-Type: application/json" \<br>
-    &nbsp;&nbsp;-H "X-Admin-Key: &lt;your-ADMIN_API_KEY&gt;" \<br>
-    &nbsp;&nbsp;-d '{"name": "my-app"}'
-  </div>
-</div>
 {% endif %}
 {% endblock %}
 

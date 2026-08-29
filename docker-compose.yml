@@ -76,6 +76,9 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.102.0
+    # Default config is open (no auth), matching AUTH_TOKEN-blank ingest.
+    # To require a bearer token on 4317/4318, mount otel-collector-config.auth.yaml
+    # instead and set AUTH_TOKEN in .env.
     command: ["--config=/etc/otel/config.yaml"]
     volumes:
       - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
@@ -83,7 +86,7 @@ services:
       - "4317:4317"
       - "4318:4318"
     environment:
-      - "OTEL_BEARER_TOKEN=${OTEL_BEARER_TOKEN:?Error: OTEL_BEARER_TOKEN is not set in .env}"
+      - "AUTH_TOKEN=${AUTH_TOKEN:-}"
     depends_on:
       kafka:
         condition: service_healthy
@@ -105,9 +108,8 @@ services:
       # Point Alembic migrations at the direct Postgres port, bypassing PgBouncer
       # if you add a pooler in front of postgres later.
       - MIGRATIONS_DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
-      - ADMIN_API_KEY=${ADMIN_API_KEY}
-      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
-      - OTEL_COLLECTOR_ENDPOINT=http://otel-collector:4317
+      # Optional shared token. Blank = ingest is open (self-hosted / trusted network).
+      - AUTH_TOKEN=${AUTH_TOKEN:-}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_TOPIC_RAW=engram.events.raw
       # Managed Kafka (Confluent Cloud / MSK / Upstash) — leave blank for local dev
@@ -203,7 +205,10 @@ services:
     environment:
       - DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
       - INGESTOR_HOST=${INGESTOR_HOST:-http://localhost:8000}
-      - DASHBOARD_SECRET_KEY=${DASHBOARD_SECRET_KEY}
+      # Optional shared token. Blank = dashboard has no login.
+      - AUTH_TOKEN=${AUTH_TOKEN:-}
+      # Only used to sign the login cookie when AUTH_TOKEN is set.
+      - DASHBOARD_SECRET_KEY=${DASHBOARD_SECRET_KEY:-}
       - HTTPS=${HTTPS:-0}
       - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
       - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}

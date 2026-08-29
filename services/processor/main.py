@@ -1,9 +1,9 @@
 """
 Engram Stream Processor — updated for OTel
 
-Consumes from `engram.events.raw`, which now receives both:
+Consumes from `engram.events.raw`, which receives both:
   - OTel JSON (from the OTel Collector's kafkaexporter) — any language
-  - Engram-native JSON (from the GitHub webhook deployment events)
+  - Engram-native JSON (from the ingestor's /ingest endpoint via the SDK)
 
 The shared otel_normalizer translates both formats into Engram internal
 event dicts before they reach the aggregator and anomaly detector.

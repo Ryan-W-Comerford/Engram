@@ -26,7 +26,7 @@ _STUB_MODULES = [
     # Kafka client (requires native .so, not available locally)
     "confluent_kafka",
     "confluent_kafka.admin",
-    # OpenTelemetry (pulled by services/ingestor/webhooks.py)
+    # OpenTelemetry (defensive stub — no service imports it directly anymore)
     "opentelemetry",
     "opentelemetry.trace",
     "opentelemetry.sdk",
@@ -69,9 +69,9 @@ _add("services/processor")  # `from aggregator import ...`, `from anomaly import
 
 # ── 4. Test-only environment variables ────────────────────────────────────────
 # Force these values regardless of what the shell has set so tests are
-# deterministic. ADMIN_API_KEY and DASHBOARD_SECRET_KEY are read at import
-# time by main.py and auth.py respectively.
-os.environ["ADMIN_API_KEY"]        = "test-admin-key-for-unit-tests"
+# deterministic. AUTH_TOKEN is left unset so the suite exercises the default
+# "open" configuration; DASHBOARD_SECRET_KEY is read at import time by auth.py.
+os.environ.pop("AUTH_TOKEN", None)
 os.environ["DASHBOARD_SECRET_KEY"] = "test-dashboard-secret-key-32ch"
 # DATABASE_URL is read by shared/db/session.py at import time.
 # Any postgresql:// URL works because psycopg2 is mocked above; no actual

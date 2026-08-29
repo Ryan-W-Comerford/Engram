@@ -1,34 +1,26 @@
-# Engram — SDK Quickstart (Any Language)
+# Engram — OTel Quickstart (Any Language)
 
+Engram is single-tenant. There is **no project UUID and no per-app key** — every
+app that points at the collector feeds the same instance.
 
-## Authentication — OTel Bearer Token
-
-All apps sending telemetry must include your `OTEL_BEARER_TOKEN` in the
-OTLP exporter headers. Set it via the standard OTel environment variable:
-
-```bash
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your-token-here"
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
-```
-
-Or pass it in code (example for Python):
-```python
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-
-exporter = OTLPSpanExporter(
-    endpoint="http://localhost:4317",
-    headers={"Authorization": f"Bearer {os.environ['OTEL_BEARER_TOKEN']}"},
-    insecure=True,
-)
-```
-
----
 All you need in any language is:
 1. Install the OTel SDK for your language (usually auto-instrumentation — zero code changes)
-2. Set the `engram.project_id` resource attribute to your project UUID
-3. Point the exporter at `localhost:4317` (or your Engram host)
+2. Point the exporter at `localhost:4317` (or your Engram host)
 
 That's it. No custom SDK. No HTTP calls in your app code.
+
+## Authentication (optional)
+
+If the Engram instance sets `AUTH_TOKEN` (and swaps in
+`otel-collector-config.auth.yaml` — see `docker-compose.yml`), send it as a
+bearer token:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <AUTH_TOKEN>"
+```
+
+If `AUTH_TOKEN` is unset (the default), omit the headers entirely.
 
 ---
 
@@ -44,7 +36,7 @@ opentelemetry-bootstrap --action=install   # auto-detects your framework
 opentelemetry-instrument \
   --service_name my-api \
   --exporter_otlp_endpoint http://localhost:4317 \
-  --resource_attributes "engram.project_id=YOUR_PROJECT_UUID,deployment.environment=production" \
+  --resource_attributes "deployment.environment=production" \
   python app.py
 ```
 
@@ -68,7 +60,6 @@ const { Resource } = require('@opentelemetry/resources');
 const sdk = new NodeSDK({
   resource: new Resource({
     'service.name':          'my-node-api',
-    'engram.project_id':    'YOUR_PROJECT_UUID',
     'deployment.environment': 'production',
   }),
   traceExporter: new OTLPTraceExporter({
@@ -99,7 +90,7 @@ curl -L https://github.com/open-telemetry/opentelemetry-java-instrumentation/rel
 java \
   -javaagent:./opentelemetry-javaagent.jar \
   -Dotel.service.name=my-spring-api \
-  -Dotel.resource.attributes="engram.project_id=YOUR_PROJECT_UUID,deployment.environment=production" \
+  -Dotel.resource.attributes="deployment.environment=production" \
   -Dotel.exporter.otlp.endpoint=http://localhost:4317 \
   -jar my-app.jar
 ```
@@ -144,7 +135,6 @@ func InitTracer(ctx context.Context) (*sdktrace.TracerProvider, error) {
         semconv.SchemaURL,
         semconv.ServiceName("my-go-api"),
         semconv.DeploymentEnvironment("production"),
-        attribute.String("engram.project_id", "YOUR_PROJECT_UUID"),
     )
 
     tp := sdktrace.NewTracerProvider(
@@ -175,7 +165,6 @@ require 'opentelemetry-exporter-otlp'
 OpenTelemetry::SDK.configure do |c|
   c.resource = OpenTelemetry::SDK::Resources::Resource.create(
     'service.name'           => 'my-rails-api',
-    'engram.project_id'     => 'YOUR_PROJECT_UUID',
     'deployment.environment' => 'production',
   )
   c.add_span_processor(
@@ -205,7 +194,6 @@ builder.Services.AddOpenTelemetry()
         .AddService("my-dotnet-api")
         .AddAttributes(new Dictionary<string, object>
         {
-            ["engram.project_id"]      = "YOUR_PROJECT_UUID",
             ["deployment.environment"]  = "production",
         }))
     .WithTracing(tracing => tracing
@@ -216,18 +204,11 @@ builder.Services.AddOpenTelemetry()
 
 ---
 
-## The one thing every language needs
+## Environments
 
-```
-engram.project_id = YOUR_PROJECT_UUID
-```
+Tag each app with `deployment.environment` (`production`, `staging`, `dev`) so
+the dashboard can tell them apart. That's the only attribute Engram cares about
+beyond `service.name`.
 
-Get your project UUID from:
-```bash
-curl -s -X POST http://localhost:8000/projects \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-app"}' | python3 -m json.tool
-# Copy the "project_id" field
-```
-
-Your API key is also returned — keep it for the GitHub webhook and settings page.
+Point every exporter at `http://localhost:4317` (or wherever you run Engram) and
+you're done.

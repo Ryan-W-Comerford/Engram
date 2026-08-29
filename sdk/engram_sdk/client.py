@@ -1,11 +1,11 @@
 """
-PulseAI SDK client.
+Engram SDK client.
 
 Usage (FastAPI):
-    from engram_sdk import PulseAI
+    from engram_sdk import Engram
 
-    pulse = Engram(api_key="pk_live_...", host="https://ingest.pulseai.dev")
-    pulse.auto_instrument(app)   # wraps your FastAPI/Flask app automatically
+    pulse = Engram(host="http://localhost:8000")   # add token=... if the
+    pulse.auto_instrument(app)                      # instance sets AUTH_TOKEN
 
 Usage (manual):
     pulse.capture_error(exception_type="ValueError", message="bad input")
@@ -32,38 +32,33 @@ class Engram:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
         host: str = "http://localhost:8000",
+        token: Optional[str] = None,
         environment: str = "production",
         service: Optional[str] = None,
     ) -> None:
         """
         Args:
-            api_key:     Your project API key (pk_live_...).
-                         Falls back to ENGRAM_API_KEY env var if not provided.
             host:        URL of your Engram ingestor.
                          Falls back to ENGRAM_HOST env var, then localhost:8000.
+            token:       Only needed if the Engram instance sets AUTH_TOKEN.
+                         Falls back to ENGRAM_TOKEN, then AUTH_TOKEN env var.
             environment: Logical environment tag ("production", "staging", "dev").
             service:     Optional service name tag ("api-gateway", "worker", etc).
         """
-        resolved_key = api_key or os.getenv("ENGRAM_API_KEY")
-        if not resolved_key:
-            raise ValueError(
-                "Engram API key is required. Pass api_key=... or set ENGRAM_API_KEY."
-            )
-
         resolved_host = host or os.getenv("ENGRAM_HOST", "http://localhost:8000")
+        resolved_token = token or os.getenv("ENGRAM_TOKEN") or os.getenv("AUTH_TOKEN")
 
         self._environment = environment
         self._service = service
-        self._transport = Transport(api_key=resolved_key, host=resolved_host)
+        self._transport = Transport(host=resolved_host, token=resolved_token)
 
         # Flush remaining queue items gracefully when the process exits
         atexit.register(self._transport.shutdown)
 
         logger.info(
             f"Engram initialized | host={resolved_host} "
-            f"env={environment} service={service}"
+            f"env={environment} service={service} auth={'on' if resolved_token else 'off'}"
         )
 
     # ── Auto-instrumentation ───────────────────────────────────────────────────
@@ -151,26 +146,3 @@ class Engram:
             },
         })
 
-    def capture_deployment(
-        self,
-        commit_sha: str,
-        branch: str,
-        pusher: Optional[str] = None,
-        commit_message: Optional[str] = None,
-    ) -> None:
-        """
-        Manually record a deployment event. Alternative to the GitHub webhook
-        when you want to trigger this from within your own CI/CD pipeline.
-        """
-        self._transport.enqueue({
-            "event_type": "deployment",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "environment": self._environment,
-            "service": self._service,
-            "data": {
-                "commit_sha": commit_sha,
-                "branch": branch,
-                "pusher": pusher,
-                "commit_message": commit_message,
-            },
-        })

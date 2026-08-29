@@ -3,7 +3,7 @@ Incident writer — Option C: incident memory.
 
 Processing order for each anomaly signal:
   1.  Create incident row immediately (never lose an anomaly)
-  2.  Fetch recent errors + deployments from DB
+  2.  Fetch recent errors from DB
   3.  Generate a query embedding from the error context
   4.  Search for similar past incidents using pgvector cosine similarity
   5.  Call Claude — with similar incidents injected into the prompt
@@ -48,26 +48,6 @@ def _fetch_error_events(db: Session, project_id: str, since: datetime) -> list[E
         .limit(50)
         .all()
     )
-
-
-def _fetch_deployment_events(db: Session, project_id: str, since: datetime) -> list[Event]:
-    return (
-        db.query(Event)
-        .filter(
-            Event.project_id == uuid.UUID(project_id),
-            Event.event_type == EventType.DEPLOYMENT,
-            Event.timestamp >= since,
-        )
-        .order_by(Event.timestamp.desc())
-        .limit(10)
-        .all()
-    )
-
-
-def _find_correlated_deployment(deployment_events: list[Event], analysis: dict) -> Optional[uuid.UUID]:
-    if not analysis.get("deployment_correlated") or not deployment_events:
-        return None
-    return deployment_events[0].id
 
 
 def _map_severity(severity_str: Optional[str]) -> Optional[Severity]:
@@ -141,10 +121,9 @@ def process_anomaly_signal(signal: dict) -> None:
         incident_persisted = True
         logger.info(f"Incident created | id={incident.id}")
 
-        # ── Step 2: Fetch error + deployment context ────────────────────────────
-        error_events      = _fetch_error_events(db, project_id, since)
-        deployment_events = _fetch_deployment_events(db, project_id, since)
-        logger.info(f"Context | errors={len(error_events)} deployments={len(deployment_events)}")
+        # ── Step 2: Fetch error context ───────────────────────────────────────
+        error_events = _fetch_error_events(db, project_id, since)
+        logger.info(f"Context | errors={len(error_events)}")
 
         # ── Step 3: Generate query embedding from current error context ─────────
         # We embed a description of the current incident's symptoms BEFORE
@@ -184,7 +163,6 @@ def process_anomaly_signal(signal: dict) -> None:
         analysis = analyze_incident(
             anomaly_signal=signal,
             error_events=error_events,
-            deployment_events=deployment_events,
             similar_incidents_text=similar_text,
         )
 
@@ -195,7 +173,6 @@ def process_anomaly_signal(signal: dict) -> None:
             incident.ai_summary         = json.dumps(analysis)
             incident.affected_endpoints = analysis.get("affected_endpoints", [])
             incident.recommended_actions= analysis.get("recommended_actions", [])
-            incident.deployment_event_id= _find_correlated_deployment(deployment_events, analysis)
             incident.ai_analyzed        = True
 
             # Generate the final embedding from Claude's authoritative analysis

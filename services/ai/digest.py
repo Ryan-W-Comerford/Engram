@@ -15,7 +15,7 @@ import anthropic
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from shared.db.models import DailyDigest, Event, EventType, Incident, Project
+from shared.db.models import DailyDigest, Event, Incident, Project
 from shared.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -68,27 +68,6 @@ def _collect_stats(db: Session, project_id, target_date: date) -> dict:
     """), {"pid": str(project_id), "day_start": day_start, "day_end": day_end}).fetchall()
     top_errors = [{"type": row[0], "count": row[1]} for row in exc_rows]
 
-    # Deployments
-    deploy_events = (
-        db.query(Event)
-        .filter(
-            Event.project_id == project_id,
-            Event.event_type == EventType.DEPLOYMENT,
-            Event.timestamp  >= day_start,
-            Event.timestamp  <  day_end,
-        )
-        .order_by(Event.timestamp)
-        .all()
-    )
-    deployments = [
-        {
-            "sha":    (e.raw_data.get("commit_sha") or "")[:7],
-            "branch": e.raw_data.get("branch", "?"),
-            "pusher": e.raw_data.get("pusher", "?"),
-        }
-        for e in deploy_events
-    ]
-
     # Incidents triggered on this day
     incidents = (
         db.query(Incident)
@@ -109,15 +88,13 @@ def _collect_stats(db: Session, project_id, target_date: date) -> dict:
     ]
 
     return {
-        "total_events":     total,
-        "error_count":      total_errors,
-        "trace_count":      total_traces,
-        "deployment_count": len(deployments),
-        "incident_count":   len(incidents),
-        "error_rate":       error_rate,
-        "top_errors":       top_errors,
-        "deployments":      deployments,
-        "incidents":        incident_summaries,
+        "total_events":   total,
+        "error_count":    total_errors,
+        "trace_count":    total_traces,
+        "incident_count": len(incidents),
+        "error_rate":     error_rate,
+        "top_errors":     top_errors,
+        "incidents":      incident_summaries,
     }
 
 
@@ -129,7 +106,6 @@ def _call_claude(project_name: str, stats: dict, prev_stats: dict | None) -> dic
         f"  Total events : {stats['total_events']}",
         f"  Errors       : {stats['error_count']} ({stats['error_rate']}% of traffic)",
         f"  Traces       : {stats['trace_count']}",
-        f"  Deployments  : {stats['deployment_count']}",
         f"  Incidents    : {stats['incident_count']}",
     ]
 
@@ -137,11 +113,6 @@ def _call_claude(project_name: str, stats: dict, prev_stats: dict | None) -> dic
         lines.append("\nTop error types:")
         for e in stats["top_errors"]:
             lines.append(f"  - {e['type']}: {e['count']} occurrences")
-
-    if stats["deployments"]:
-        lines.append("\nDeployments shipped:")
-        for d in stats["deployments"]:
-            lines.append(f"  - {d['sha']} on {d['branch']} by {d['pusher']}")
 
     if stats["incidents"]:
         lines.append("\nIncidents triggered:")

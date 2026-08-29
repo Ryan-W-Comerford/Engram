@@ -52,16 +52,20 @@ ssh "$REMOTE" bash -s << EOF
   cp Caddyfile /etc/caddy/Caddyfile
   systemctl reload caddy
 
+  COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+
   echo "--> Starting stack"
-  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+  # --wait blocks until every service with a healthcheck is healthy (or fails).
+  \$COMPOSE up -d --wait
 
   echo "--> Running migrations"
-  sleep 5
-  docker compose exec ingestor alembic upgrade head
+  # -T disables pseudo-TTY allocation — required when run over a non-interactive
+  # ssh heredoc, otherwise docker exec errors with "the input device is not a TTY".
+  \$COMPOSE exec -T ingestor alembic upgrade head
 
   echo ""
   echo "Deploy complete."
-  docker compose ps
+  \$COMPOSE ps
 EOF
 
 echo ""

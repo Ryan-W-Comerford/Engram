@@ -22,8 +22,7 @@ chown "$SUDO_USER:$SUDO_USER" /opt/engram 2>/dev/null || true
 echo "==> Configuring firewall (ufw)"
 ufw allow 22/tcp      # SSH
 ufw allow 80/tcp      # HTTP (Caddy redirect)
-ufw allow 443/tcp     # HTTPS (Caddy)
-ufw allow 4317/tcp    # OTel gRPC
+ufw allow 443/tcp     # HTTPS (Caddy) — also carries OTel over HTTP/4318 via otel.<domain>
 ufw --force enable
 
 echo ""

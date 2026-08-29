@@ -24,13 +24,14 @@ from shared.db.similarity import find_similar_incidents
 from shared.db.session import get_db
 from shared.logging_config import setup_logging
 from auth import (
+    AUTH_REQUIRED,
     NotAuthenticated,
     SECURE_COOKIES,
     SESSION_COOKIE,
     SESSION_MAX_AGE,
-    get_session_project,
-    hash_api_key,
+    get_current_view,
     make_session_token,
+    token_matches,
 )
 
 setup_logging("dashboard")
@@ -43,6 +44,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 BASE_DIR      = os.path.dirname(__file__)
 templates     = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+templates.env.globals["auth_required"] = AUTH_REQUIRED
 INGESTOR_HOST = os.getenv("INGESTOR_HOST", "http://localhost:8000")
 
 _static_dir = os.path.join(BASE_DIR, "static")
@@ -60,40 +62,35 @@ async def not_authenticated_handler(request: Request, exc: NotAuthenticated):
 
 
 # ── Login / logout ─────────────────────────────────────────────────────────────
+# Only meaningful when AUTH_TOKEN is set. When it isn't, /login just bounces home.
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, error: Optional[str] = Query(None)):
+    if not AUTH_REQUIRED:
+        return RedirectResponse(url="/", status_code=302)
     return templates.TemplateResponse(request, "login.html", {"error": bool(error)})
 
 
 @app.post("/login")
 @limiter.limit("10/minute")
-def login_post(
-    request: Request,
-    api_key: str = Form(...),
-    db: Session = Depends(get_db),
-):
-    if not api_key or not api_key.strip():
-        return RedirectResponse(url="/login?error=1", status_code=302)
+def login_post(request: Request, token: str = Form(...)):
+    if not AUTH_REQUIRED:
+        return RedirectResponse(url="/", status_code=302)
 
-    key_hash = hash_api_key(api_key.strip())
-    project  = db.query(Project).filter(Project.api_key_hash == key_hash).first()
-
-    if not project:
+    if not token_matches(token or ""):
         logger.warning(f"Failed login attempt | ip={request.client.host if request.client else '?'}")
         return RedirectResponse(url="/login?error=1", status_code=302)
 
-    token    = make_session_token(str(project.id))
     response = RedirectResponse(url="/", status_code=302)
     response.set_cookie(
         key=SESSION_COOKIE,
-        value=token,
+        value=make_session_token(),
         max_age=SESSION_MAX_AGE,
         httponly=True,
         samesite="lax",
         secure=SECURE_COOKIES,
     )
-    logger.info(f"Login successful | project='{project.name}' id={project.id}")
+    logger.info("Login successful")
     return response
 
 
@@ -117,7 +114,7 @@ def health():
 def dashboard(
     request: Request,
     db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
 ):
     since_24h = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
     since_1h  = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
@@ -155,16 +152,6 @@ def dashboard(
         .scalar() or 0
     )
 
-    last_deployment = (
-        db.query(Event)
-        .filter(
-            Event.project_id == project.id,
-            Event.event_type == EventType.DEPLOYMENT,
-        )
-        .order_by(Event.timestamp.desc())
-        .first()
-    )
-
     recent_incidents = (
         db.query(Incident)
         .filter(Incident.project_id == project.id)
@@ -191,26 +178,16 @@ def dashboard(
         .first()
     )
 
-    recent_deployments = (
-        db.query(Event)
-        .filter(Event.project_id == project.id, Event.event_type == EventType.DEPLOYMENT)
-        .order_by(Event.timestamp.desc())
-        .limit(3)
-        .all()
-    )
-
     return templates.TemplateResponse(request, "index.html", {
         "project": project,
         "stats": {
             "total_events_24h": total_events_24h,
             "error_rate": error_rate,
             "open_incidents": open_incidents,
-            "last_deployment": last_deployment,
         },
-        "recent_incidents":   recent_incidents,
-        "recent_deployments": recent_deployments,
-        "recent_events":      recent_events,
-        "digest":             latest_digest,
+        "recent_incidents": recent_incidents,
+        "recent_events":    recent_events,
+        "digest":           latest_digest,
         "page": "dashboard",
     })
 
@@ -220,7 +197,7 @@ def incident_detail(
     request: Request,
     incident_id: str,
     db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
 ):
     try:
         iid = uuid.UUID(incident_id)
@@ -239,12 +216,6 @@ def incident_detail(
             analysis = json.loads(incident.ai_summary)
         except (json.JSONDecodeError, TypeError):
             analysis = {}
-
-    deployment_event = None
-    if incident.deployment_event_id:
-        deployment_event = (
-            db.query(Event).filter(Event.id == incident.deployment_event_id).first()
-        )
 
     since = incident.detected_at - timedelta(minutes=30)
     sample_errors = (
@@ -276,7 +247,6 @@ def incident_detail(
         "project":          project,
         "incident":         incident,
         "analysis":         analysis,
-        "deployment_event": deployment_event,
         "sample_errors":    sample_errors,
         "similar_incidents":similar_incidents,
         "page": "incidents",
@@ -288,7 +258,7 @@ def resolve_incident(
     incident_id: str,
     body: dict = Body(default={}),
     db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
 ):
     try:
         iid = uuid.UUID(incident_id)
@@ -314,12 +284,10 @@ def resolve_incident(
 def settings(
     request: Request,
     db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
 ):
-    webhook_url = f"{INGESTOR_HOST}/webhooks/github/{project.id}"
     return templates.TemplateResponse(request, "settings.html", {
         "project":       project,
-        "webhook_url":   webhook_url,
         "ingestor_host": INGESTOR_HOST,
         "page": "settings",
     })
@@ -330,7 +298,7 @@ def settings(
 @app.get("/live", response_class=HTMLResponse)
 def live_events(
     request: Request,
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
 ):
     return templates.TemplateResponse(request, "live.html", {
         "project": project,
@@ -344,7 +312,7 @@ def live_events(
 def incidents_list(
     request: Request,
     db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
     status: Optional[str] = Query(None),
 ):
     q = db.query(Incident).filter(Incident.project_id == project.id)
@@ -362,35 +330,13 @@ def incidents_list(
     })
 
 
-# ── Deployments list ───────────────────────────────────────────────────────────
-
-@app.get("/deployments", response_class=HTMLResponse)
-def deployments_list(
-    request: Request,
-    db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
-):
-    deploys = (
-        db.query(Event)
-        .filter(Event.project_id == project.id, Event.event_type == EventType.DEPLOYMENT)
-        .order_by(Event.timestamp.desc())
-        .limit(100)
-        .all()
-    )
-    return templates.TemplateResponse(request, "deployments.html", {
-        "project":     project,
-        "deployments": deploys,
-        "page":        "deployments",
-    })
-
-
 # ── Daily digest ───────────────────────────────────────────────────────────────
 
 @app.get("/digest", response_class=HTMLResponse)
 def digest(
     request: Request,
     db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
 ):
     recent = (
         db.query(DailyDigest)
@@ -412,7 +358,7 @@ def digest(
 @app.get("/api/metrics")
 def api_metrics(
     db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
 ):
     now = datetime.now(timezone.utc).replace(second=0, microsecond=0, tzinfo=None)
     since = now - timedelta(minutes=30)
@@ -443,26 +389,17 @@ def api_metrics(
             elif event_type == "trace":
                 traces_map[bucket] = cnt
 
-    dep_rows = db.execute(text("""
-        SELECT to_char(date_trunc('minute', timestamp), 'HH24:MI') AS bucket
-        FROM events
-        WHERE project_id = :pid
-          AND event_type = 'deployment'
-          AND timestamp > :since
-    """), {"pid": str(project.id), "since": since}).fetchall()
-
     return {
-        "labels":      labels,
-        "errors":      [errors_map[l] for l in labels],
-        "traces":      [traces_map[l] for l in labels],
-        "deployments": list({r[0] for r in dep_rows}),
+        "labels": labels,
+        "errors": [errors_map[l] for l in labels],
+        "traces": [traces_map[l] for l in labels],
     }
 
 
 @app.get("/api/events/stream")
 def api_events_stream(
     db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
     event_type: Optional[str] = Query(None),
     since: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
@@ -501,7 +438,7 @@ def api_events_stream(
 @app.get("/api/events/recent")
 def api_events_recent(
     db: Session = Depends(get_db),
-    project: Project = Depends(get_session_project),
+    project: Project = Depends(get_current_view),
 ):
     events = (
         db.query(Event)

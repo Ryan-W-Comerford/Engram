@@ -29,7 +29,7 @@ try:
         Add to your FastAPI app:
 
             from engram_sdk import PulseAI
-            pulse = Engram(api_key="pk_live_...")
+            pulse = Engram(host="http://localhost:8000")
             pulse.auto_instrument(app)   # ← one line
 
         Every request generates a trace event. Unhandled exceptions also
@@ -105,7 +105,7 @@ try:
         Add to your Flask app:
 
             from engram_sdk import PulseAI
-            pulse = Engram(api_key="pk_live_...")
+            pulse = Engram(host="http://localhost:8000")
             pulse.auto_instrument(app)   # ← one line
         """
 

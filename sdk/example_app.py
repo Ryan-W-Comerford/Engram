@@ -3,7 +3,7 @@ Test app for validating Phase 2 end-to-end.
 
 Run this after `docker compose up` is healthy:
     pip install -e ./sdk
-    ENGRAM_API_KEY=pk_live_... python sdk/example_app.py
+    python sdk/example_app.py          # add ENGRAM_TOKEN=... if the instance sets AUTH_TOKEN
 
 Then in a second terminal, hammer the error endpoint to trigger the anomaly
 detector (fires when errors spike to 1.5× baseline within a 1-minute window):
@@ -23,7 +23,6 @@ from engram_sdk import Engram
 app = FastAPI(title="Engram Example App")
 
 pulse = Engram(
-    api_key=os.environ["ENGRAM_API_KEY"],
     host=os.getenv("ENGRAM_HOST", "http://localhost:8000"),
     environment="production",
     service="example-api",

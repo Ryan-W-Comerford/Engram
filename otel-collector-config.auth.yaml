@@ -1,16 +1,20 @@
-# otel-collector-config.yaml  (default — open, no auth)
+# otel-collector-config.auth.yaml  (opt-in — bearer token on every OTLP request)
 #
-# Engram is single-tenant and open by default. The OTLP receivers accept any
-# traffic that reaches them. Bind the ports to a trusted network, or swap in
-# otel-collector-config.auth.yaml (bearer token = AUTH_TOKEN) if you expose them.
+# Use this instead of otel-collector-config.yaml when you expose the OTLP ports
+# (4317 / 4318) beyond a trusted network. The token is AUTH_TOKEN from .env, so
+# it's the same secret the SDK and dashboard use.
 #
-# Pipeline:
-#   receivers:  OTLP/gRPC (:4317) + OTLP/HTTP (:4318)
-#   processors: batch -> transform (OTel -> Engram schema)
-#   exporters:  kafka (engram.events.raw) + debug
+# Enable it by editing the otel-collector service in docker-compose.yml:
+#   volumes:
+#     - ./otel-collector-config.auth.yaml:/etc/otel/config.yaml:ro
+#
+# Exporters must then send:
+#   OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <AUTH_TOKEN>
 
 extensions:
-  # Health check endpoint — used by Docker/K8s probes
+  bearertokenauth:
+    token: "${env:AUTH_TOKEN}"
+
   health_check:
     endpoint: 0.0.0.0:13133
 
@@ -19,8 +23,12 @@ receivers:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
+        auth:
+          authenticator: bearertokenauth
       http:
         endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth
 
 processors:
   batch:
@@ -70,7 +78,7 @@ exporters:
     verbosity: basic
 
 service:
-  extensions: [health_check]
+  extensions: [bearertokenauth, health_check]
   pipelines:
     traces:
       receivers:  [otlp]

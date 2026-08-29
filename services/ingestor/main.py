@@ -1,8 +1,7 @@
 """
-Engram Ingestor — admin API + direct event ingest for Python SDK.
+Engram Ingestor — direct event ingest for the Python SDK.
 """
 
-import hmac
 import json
 import logging
 import os
@@ -10,29 +9,31 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional, Union
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Body, Depends, FastAPI, Request
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from shared.db.models import Event, EventType, Project
+from shared.db.models import Event, EventType
 from shared.db.session import get_db
+from shared.db.tenant import get_or_create_default_project
 from shared.kafka_config import producer_config
 from shared.logging_config import setup_logging
-from auth import generate_api_key, get_current_project, hash_api_key
-from schemas import CreateProjectRequest, CreateProjectResponse, HealthResponse
-from webhooks import router as webhooks_router
+from auth import AUTH_TOKEN, require_token
+from schemas import HealthResponse
 
 setup_logging("ingestor")
 logger = logging.getLogger(__name__)
 
 KAFKA_TOPIC_RAW = os.getenv("KAFKA_TOPIC_RAW", "engram.events.raw")
-ADMIN_API_KEY   = os.getenv("ADMIN_API_KEY", "")
 
-if not ADMIN_API_KEY:
-    logger.warning("ADMIN_API_KEY is not set — POST /projects will return 503 until configured")
+if AUTH_TOKEN:
+    logger.info("AUTH_TOKEN is set — write endpoints require a bearer token")
+else:
+    logger.info("AUTH_TOKEN is not set — ingest is open (self-hosted / trusted network)")
 
 _producer = None
 
@@ -59,12 +60,6 @@ class TraceEventData(BaseModel):
     status_code: int
     duration_ms: float
 
-class DeploymentEventData(BaseModel):
-    commit_sha: str
-    branch: str
-    pusher: Optional[str] = None
-    commit_message: Optional[str] = None
-
 class ErrorEvent(BaseModel):
     event_type: Literal["error"]
     timestamp: datetime
@@ -79,15 +74,8 @@ class TraceEvent(BaseModel):
     service: Optional[str] = None
     data: TraceEventData
 
-class DeploymentEvent(BaseModel):
-    event_type: Literal["deployment"]
-    timestamp: datetime
-    environment: str = "production"
-    service: Optional[str] = None
-    data: DeploymentEventData
-
 IngestEventRequest = Annotated[
-    Union[ErrorEvent, TraceEvent, DeploymentEvent],
+    Union[ErrorEvent, TraceEvent],
     Field(discriminator="event_type"),
 ]
 
@@ -96,32 +84,16 @@ class IngestResponse(BaseModel):
     status: str = "received"
 
 
-# ── Auth ───────────────────────────────────────────────────────────────────────
+# ── Rate limiting (per client IP) ────────────────────────────────────────────
 
-def require_admin(x_admin_key: str = Header(..., alias="X-Admin-Key")) -> None:
-    if not ADMIN_API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="ADMIN_API_KEY is not configured on this server",
-        )
-    if not hmac.compare_digest(x_admin_key, ADMIN_API_KEY):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin key")
-
-
-# ── Rate limiting (per API key, falls back to IP) ─────────────────────────────
-
-def _rate_limit_key(request: Request) -> str:
-    return request.headers.get("X-API-Key") or (request.client.host if request.client else "unknown")
-
-limiter = Limiter(key_func=_rate_limit_key)
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ── App ────────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Engram Admin API", version="0.3.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="Engram Ingestor", version="0.4.0", docs_url=None, redoc_url=None)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.include_router(webhooks_router)
 
 
 # ── Health ─────────────────────────────────────────────────────────────────────
@@ -146,7 +118,7 @@ def health():
 @app.get("/internal/health", response_model=HealthResponse, tags=["meta"])
 def health_internal(
     db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
+    _: None = Depends(require_token),
 ) -> HealthResponse:
     db_status = "ok"
     try:
@@ -157,33 +129,6 @@ def health_internal(
     return HealthResponse(status="ok", kafka=_check_kafka(), db=db_status)
 
 
-# ── Projects ───────────────────────────────────────────────────────────────────
-
-@app.post("/projects", response_model=CreateProjectResponse, status_code=201, tags=["projects"])
-def create_project(
-    body: CreateProjectRequest,
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
-) -> CreateProjectResponse:
-    api_key = generate_api_key()
-    project = Project(
-        id=uuid.uuid4(),
-        name=body.name,
-        api_key_hash=hash_api_key(api_key),
-        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
-    )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-    logger.info(f"Created project '{project.name}' id={project.id}")
-    return CreateProjectResponse(
-        project_id=str(project.id),
-        name=project.name,
-        api_key=api_key,
-        created_at=project.created_at,
-    )
-
-
 # ── Ingest ─────────────────────────────────────────────────────────────────────
 
 @app.post("/ingest", response_model=IngestResponse, tags=["events"])
@@ -191,9 +136,10 @@ def create_project(
 def ingest_event(
     request: Request,
     body: Annotated[IngestEventRequest, Body(...)],
-    project: Project = Depends(get_current_project),
+    _: None = Depends(require_token),
     db: Session = Depends(get_db),
 ) -> IngestResponse:
+    project = get_or_create_default_project(db)
     event_id = uuid.uuid4()
 
     event = Event(
@@ -225,5 +171,5 @@ def ingest_event(
     except Exception as e:
         logger.error(f"Kafka publish failed (event still saved to DB): {e}")
 
-    logger.info(f"Ingested {body.event_type} event {event_id} for project '{project.name}'")
+    logger.info(f"Ingested {body.event_type} event {event_id}")
     return IngestResponse(event_id=str(event_id))

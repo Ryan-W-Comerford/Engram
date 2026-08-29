@@ -138,10 +138,6 @@
         </div>
       </div>
       <div class="mini-stat">
-        <div class="mini-stat-label">Deployments</div>
-        <div class="mini-stat-value" style="color:var(--accent)">{{ d.get('deployment_count', 0) }}</div>
-      </div>
-      <div class="mini-stat">
         <div class="mini-stat-label">Incidents</div>
         <div class="mini-stat-value" style="color:{% if d.get('incident_count', 0) > 0 %}var(--red){% else %}var(--green){% endif %}">
           {{ d.get('incident_count', 0) }}

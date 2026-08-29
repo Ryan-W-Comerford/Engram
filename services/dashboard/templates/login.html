@@ -234,18 +234,18 @@
   </div>
 
   <div class="card">
-    <div class="card-heading">Sign in to your project</div>
-    <div class="card-sub">Enter your project API key — it starts with <code style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);background:var(--bg-3);padding:1px 5px;border-radius:3px;">pk_live_</code> and was shown once when the project was created.</div>
+    <div class="card-heading">Enter access token</div>
+    <div class="card-sub">This Engram instance is protected by a shared token. It's the <code style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);background:var(--bg-3);padding:1px 5px;border-radius:3px;">AUTH_TOKEN</code> value from the operator's <code style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);background:var(--bg-3);padding:1px 5px;border-radius:3px;">.env</code> file.</div>
 
     <form method="POST" action="/login" autocomplete="on">
-      <label class="field-label" for="api_key">Project API key</label>
+      <label class="field-label" for="token">Access token</label>
       <div class="input-wrap">
         <input
-          id="api_key"
-          name="api_key"
+          id="token"
+          name="token"
           type="password"
           class="key-input {% if error %}is-error{% endif %}"
-          placeholder="pk_live_…"
+          placeholder="AUTH_TOKEN…"
           autocomplete="current-password"
           autofocus
           spellcheck="false"
@@ -256,7 +256,7 @@
 
       {% if error %}
       <div class="error-banner">
-        Invalid API key — check it and try again.
+        Wrong token — check it and try again.
       </div>
       {% endif %}
 
@@ -269,7 +269,7 @@
       <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="9 18 15 12 9 6"/>
       </svg>
-      Don't have a key? How to get started
+      Where do I find the token?
     </summary>
 
     <div class="setup-body">
@@ -277,37 +277,26 @@
       <div class="setup-step">
         <div class="step-num">1</div>
         <div class="step-body">
-          <strong>Find your <code>ADMIN_API_KEY</code></strong><br>
-          The person who deployed Engram set this in the <code>.env</code> file
-          (the <code>ADMIN_API_KEY</code> line). It's separate from the project key —
-          it's an admin secret used only to create and manage projects.
+          <strong>Open the <code>.env</code> file</strong><br>
+          On the machine running Engram, open the <code>.env</code> file next to
+          <code>docker-compose.yml</code> and copy the value after
+          <code>AUTH_TOKEN=</code>.
         </div>
       </div>
 
       <div class="setup-step">
         <div class="step-num">2</div>
         <div class="step-body">
-          <strong>Create a project</strong><br>
-          Run this from any terminal (replace the values in angle brackets):
-          <div class="cmd-block"><span class="kw">curl</span> -s -X POST <span class="str">http://localhost:8000/projects</span> \
-  -H <span class="str">"Content-Type: application/json"</span> \
-  -H <span class="str">"X-Admin-Key: &lt;ADMIN_API_KEY&gt;"</span> \
-  -d <span class="str">'{"name": "my-app"}'</span> | python3 -m json.tool</div>
-        </div>
-      </div>
-
-      <div class="setup-step">
-        <div class="step-num">3</div>
-        <div class="step-body">
-          <strong>Copy the <code>api_key</code> from the response</strong><br>
-          The response JSON contains an <code>api_key</code> starting with <code>pk_live_</code>.
-          Paste it into the field above. <strong>Save it now</strong> — it's shown only once.
+          <strong>Paste it above</strong><br>
+          The same token authenticates the SDK
+          (<code>Engram(token="…")</code>) and OTel exporters
+          (<code>Authorization=Bearer …</code>).
         </div>
       </div>
 
       <div class="setup-note">
-        Tip: create one project per environment (<code>my-app-dev</code>, <code>my-app-staging</code>, <code>my-app-production</code>)
-        so dev noise never reaches your production incident feed.
+        If <code>AUTH_TOKEN</code> is left blank, Engram runs with no login at all —
+        you would not be seeing this screen.
       </div>
 
     </div>
@@ -316,7 +305,7 @@
 </div>
 <script>
   function toggleVisibility() {
-    const input = document.getElementById('api_key');
+    const input = document.getElementById('token');
     const btn   = document.getElementById('toggle-btn');
     if (input.type === 'password') {
       input.type  = 'text';

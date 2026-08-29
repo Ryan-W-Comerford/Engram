@@ -12,15 +12,20 @@ class Base(DeclarativeBase):
     pass
 
 
+# Engram is single-tenant. Every event and incident belongs to this one
+# implicit project, seeded by migration 008 and by get_or_create_default_project().
+DEFAULT_PROJECT_ID   = uuid.UUID("00000000-0000-0000-0000-000000000001")
+DEFAULT_PROJECT_NAME = "default"
+
+
 # Helper so SQLAlchemy stores enum values ("error") not names ("ERROR")
 def _values(obj):
     return [e.value for e in obj]
 
 
 class EventType(str, enum.Enum):
-    ERROR      = "error"
-    TRACE      = "trace"
-    DEPLOYMENT = "deployment"
+    ERROR = "error"
+    TRACE = "trace"
 
 
 class Severity(str, enum.Enum):
@@ -39,10 +44,9 @@ class IncidentStatus(str, enum.Enum):
 class Project(Base):
     __tablename__ = "projects"
 
-    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name         = Column(String(255), nullable=False)
-    api_key_hash = Column(String(64), nullable=False, unique=True)
-    created_at   = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=DEFAULT_PROJECT_ID)
+    name       = Column(String(255), nullable=False, default=DEFAULT_PROJECT_NAME)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     events    = relationship("Event",    back_populates="project")
     incidents = relationship("Incident", back_populates="project")
@@ -82,7 +86,6 @@ class Incident(Base):
     ai_summary          = Column(Text, nullable=True)
     affected_endpoints  = Column(JSONB, nullable=True)
     recommended_actions = Column(JSONB, nullable=True)
-    deployment_event_id = Column(UUID(as_uuid=True), ForeignKey("events.id"), nullable=True)
     status              = Column(SAEnum(IncidentStatus, name="incidentstatus", values_callable=_values), nullable=False, default=IncidentStatus.OPEN)
     ai_analyzed         = Column(Boolean, nullable=False, default=False)
     embedding           = Column(Vector(1536), nullable=True)
@@ -90,8 +93,7 @@ class Incident(Base):
     resolution_note     = Column(Text, nullable=True)
     created_at          = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
-    project          = relationship("Project", back_populates="incidents")
-    deployment_event = relationship("Event", foreign_keys=[deployment_event_id])
+    project = relationship("Project", back_populates="incidents")
 
     __table_args__ = (
         Index("idx_incidents_project_detected", "project_id", "detected_at"),

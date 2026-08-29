@@ -16,8 +16,8 @@ Strategy:
 
 Usage:
   python trigger_incident.py
-  python trigger_incident.py --api-key pk_live_...
-  python trigger_incident.py --url http://localhost:8000 --api-key pk_live_...
+  python trigger_incident.py --url http://localhost:8000
+  python trigger_incident.py --token <AUTH_TOKEN>   # only if the instance sets one
 """
 
 import argparse
@@ -100,18 +100,16 @@ def countdown(seconds, label):
 def main():
     load_dotenv(Path(__file__).parent / ".env")
     p = argparse.ArgumentParser()
-    p.add_argument("--api-key", default=os.getenv("ENGRAM_API_KEY"))
+    p.add_argument("--token",   default=os.getenv("AUTH_TOKEN") or os.getenv("ENGRAM_TOKEN"))
     p.add_argument("--url",     default=os.getenv("INGESTOR_URL", "http://localhost:8000"))
     p.add_argument("--service", default="api")
     args = p.parse_args()
 
-    if not args.api_key:
-        err("No API key. Set ENGRAM_API_KEY in .env or pass --api-key.")
-        sys.exit(1)
-
     ingest_url = args.url.rstrip("/") + "/ingest"
     health_url = args.url.rstrip("/") + "/health"
-    headers    = {"Content-Type": "application/json", "X-API-Key": args.api_key}
+    headers    = {"Content-Type": "application/json"}
+    if args.token:
+        headers["Authorization"] = f"Bearer {args.token}"
 
     print()
     print(f"  {BOLD}{WHITE}Engram — Incident Trigger{RESET}")

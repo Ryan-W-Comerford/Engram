@@ -1,38 +1,35 @@
-import hashlib
-import secrets
+"""
+Optional shared-token auth for the ingestor.
 
-from fastapi import Depends, Header, HTTPException
-from sqlalchemy.orm import Session
+Engram is single-tenant and open by default. If AUTH_TOKEN is set in the
+environment, every write endpoint requires it — sent either as
+`Authorization: Bearer <token>` or `X-API-Key: <token>`. If AUTH_TOKEN is
+unset, the dependency is a no-op and the endpoint is fully open.
+"""
 
-from shared.db.models import Project
-from shared.db.session import get_db
+import hmac
+import os
 
+from fastapi import Header, HTTPException, status
 
-def generate_api_key() -> str:
-    """Generate a new API key in the format pk_live_<48 hex chars>."""
-    return "pk_live_" + secrets.token_hex(24)
-
-
-def hash_api_key(key: str) -> str:
-    """SHA-256 hash of an API key — this is what we store in the DB."""
-    return hashlib.sha256(key.encode()).hexdigest()
+AUTH_TOKEN = os.getenv("AUTH_TOKEN", "").strip()
 
 
-def get_current_project(
-    x_api_key: str = Header(..., alias="X-API-Key"),
-    db: Session = Depends(get_db),
-) -> Project:
-    """
-    FastAPI dependency that validates the X-API-Key header and returns the
-    associated Project. Raises 401 if the key is missing or unknown.
+def _extract(authorization: str | None, x_api_key: str | None) -> str:
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return (x_api_key or "").strip()
 
-    Usage:
-        @app.post("/ingest")
-        def ingest(project: Project = Depends(get_current_project)):
-            ...
-    """
-    key_hash = hash_api_key(x_api_key)
-    project = db.query(Project).filter(Project.api_key_hash == key_hash).first()
-    if not project:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    return project
+
+def require_token(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> None:
+    if not AUTH_TOKEN:
+        return
+    presented = _extract(authorization, x_api_key)
+    if not presented or not hmac.compare_digest(presented, AUTH_TOKEN):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing token. Send Authorization: Bearer <AUTH_TOKEN>.",
+        )

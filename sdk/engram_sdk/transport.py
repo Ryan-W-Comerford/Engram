@@ -22,12 +22,12 @@ _STOP_SENTINEL = object()  # signal to shut down the background thread
 class Transport:
     def __init__(
         self,
-        api_key: str,
         host: str,
+        token: str | None = None,
         timeout: float = 3.0,
         queue_size: int = 1000,
     ) -> None:
-        self._api_key = api_key
+        self._token = token
         self._host = host.rstrip("/")
         self._timeout = timeout
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=queue_size)
@@ -53,10 +53,10 @@ class Transport:
 
     def _worker(self) -> None:
         """Background thread: drains the queue and POSTs each event."""
-        with httpx.Client(
-            headers={"X-API-Key": self._api_key, "Content-Type": "application/json"},
-            timeout=self._timeout,
-        ) as client:
+        headers = {"Content-Type": "application/json"}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+        with httpx.Client(headers=headers, timeout=self._timeout) as client:
             while True:
                 payload = self._queue.get()
                 if payload is _STOP_SENTINEL:

@@ -2,7 +2,7 @@
 Engram AI Service — Phase 3
 
 Consumes anomaly signals from `engram.alerts.anomalies` and for each one:
-  1. Fetches recent error + deployment context from PostgreSQL
+  1. Fetches recent error context from PostgreSQL
   2. Calls Claude to generate an incident report
   3. Persists the incident (with AI analysis) to the DB
 

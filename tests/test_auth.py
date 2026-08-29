@@ -2,25 +2,21 @@
 tests/test_auth.py
 
 Unit tests for the two auth modules:
-  • services/ingestor/auth.py  — API key generation and hashing
-  • services/dashboard/auth.py — session cookie signing and verification
+  • services/ingestor/auth.py  — optional shared-token check (require_token)
+  • services/dashboard/auth.py — signed login-cookie helpers
 
 All tests are pure Python; no DB or running services required.
 """
 
-import hashlib
-import importlib.util
+import importlib
 import os
 import sys
 
 import pytest
 
-# ── Load auth modules by explicit file path to avoid the name collision ────────
-# Both services/ingestor/auth.py and services/dashboard/auth.py exist and
-# both would be found as `auth` once their parent dirs are in sys.path.
-# importlib.util.spec_from_file_location gives each a unique module name.
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 def _load_module(name: str, filepath: str):
     spec = importlib.util.spec_from_file_location(name, filepath)
@@ -29,90 +25,93 @@ def _load_module(name: str, filepath: str):
     spec.loader.exec_module(mod)
     return mod
 
-ingestor_auth  = _load_module(
-    "ingestor_auth",
-    os.path.join(ROOT, "services", "ingestor", "auth.py"),
-)
-dashboard_auth = _load_module(
-    "dashboard_auth",
-    os.path.join(ROOT, "services", "dashboard", "auth.py"),
-)
+
+def _load_ingestor_auth(token: str | None):
+    if token is None:
+        os.environ.pop("AUTH_TOKEN", None)
+    else:
+        os.environ["AUTH_TOKEN"] = token
+    return _load_module(
+        "ingestor_auth", os.path.join(ROOT, "services", "ingestor", "auth.py")
+    )
 
 
-# ── Ingestor: generate_api_key ─────────────────────────────────────────────────
-
-def test_api_key_has_correct_prefix():
-    key = ingestor_auth.generate_api_key()
-    assert key.startswith("pk_live_"), f"Expected prefix 'pk_live_', got: {key[:10]}"
-
-
-def test_api_key_has_correct_length():
-    key = ingestor_auth.generate_api_key()
-    # "pk_live_" (8) + 48 hex chars = 56 total
-    assert len(key) == 56, f"Expected 56 chars, got {len(key)}"
+def _load_dashboard_auth(token: str | None):
+    if token is None:
+        os.environ.pop("AUTH_TOKEN", None)
+    else:
+        os.environ["AUTH_TOKEN"] = token
+    return _load_module(
+        "dashboard_auth", os.path.join(ROOT, "services", "dashboard", "auth.py")
+    )
 
 
-def test_api_keys_are_unique():
-    keys = {ingestor_auth.generate_api_key() for _ in range(20)}
-    assert len(keys) == 20, "Two API keys collided — entropy is broken"
+# ── Ingestor: require_token ───────────────────────────────────────────────────
+
+def test_require_token_noop_when_unset():
+    mod = _load_ingestor_auth(None)
+    # No exception regardless of what's presented.
+    assert mod.require_token(authorization=None, x_api_key=None) is None
+    assert mod.require_token(authorization="Bearer anything", x_api_key=None) is None
 
 
-# ── Ingestor: hash_api_key ─────────────────────────────────────────────────────
-
-def test_hash_is_deterministic():
-    key  = "pk_live_abc123"
-    h1   = ingestor_auth.hash_api_key(key)
-    h2   = ingestor_auth.hash_api_key(key)
-    assert h1 == h2
+def test_require_token_accepts_bearer():
+    mod = _load_ingestor_auth("s3cret")
+    assert mod.require_token(authorization="Bearer s3cret", x_api_key=None) is None
 
 
-def test_hash_is_sha256():
-    key      = "test_key"
-    expected = hashlib.sha256(b"test_key").hexdigest()
-    assert ingestor_auth.hash_api_key(key) == expected
+def test_require_token_accepts_x_api_key():
+    mod = _load_ingestor_auth("s3cret")
+    assert mod.require_token(authorization=None, x_api_key="s3cret") is None
 
 
-def test_different_keys_produce_different_hashes():
-    h1 = ingestor_auth.hash_api_key("key_one")
-    h2 = ingestor_auth.hash_api_key("key_two")
-    assert h1 != h2
+def test_require_token_rejects_wrong_and_missing():
+    mod = _load_ingestor_auth("s3cret")
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as e1:
+        mod.require_token(authorization="Bearer nope", x_api_key=None)
+    assert e1.value.status_code == 401
+
+    with pytest.raises(HTTPException) as e2:
+        mod.require_token(authorization=None, x_api_key=None)
+    assert e2.value.status_code == 401
 
 
-def test_hash_output_is_64_hex_chars():
-    h = ingestor_auth.hash_api_key("anything")
-    assert len(h) == 64
-    assert all(c in "0123456789abcdef" for c in h)
+# ── Dashboard: session cookie ────────────────────────────────────────────────
 
+def test_dashboard_open_when_token_unset():
+    mod = _load_dashboard_auth(None)
+    assert mod.AUTH_REQUIRED is False
 
-# ── Dashboard: session token roundtrip ────────────────────────────────────────
 
 def test_session_token_roundtrip():
-    project_id = "abb7108b-375e-43a2-8015-7875d25f5f3f"
-    token = dashboard_auth.make_session_token(project_id)
-    recovered = dashboard_auth.verify_session_token(token)
-    assert recovered == project_id
+    mod = _load_dashboard_auth("s3cret")
+    token = mod.make_session_token()
+    assert mod.verify_session_token(token) is True
 
 
-def test_verify_tampered_token_returns_none():
-    project_id = "abb7108b-375e-43a2-8015-7875d25f5f3f"
-    token = dashboard_auth.make_session_token(project_id)
-    # Flip one character in the middle of the token
+def test_verify_tampered_token_is_false():
+    mod = _load_dashboard_auth("s3cret")
+    token = mod.make_session_token()
     mid = len(token) // 2
     bad = token[:mid] + ("X" if token[mid] != "X" else "Y") + token[mid + 1:]
-    assert dashboard_auth.verify_session_token(bad) is None
+    assert mod.verify_session_token(bad) is False
 
 
-def test_verify_empty_token_returns_none():
-    assert dashboard_auth.verify_session_token("") is None
+def test_verify_empty_and_garbage_are_false():
+    mod = _load_dashboard_auth("s3cret")
+    assert mod.verify_session_token("") is False
+    assert mod.verify_session_token("not.a.real.token") is False
 
 
-def test_verify_garbage_token_returns_none():
-    assert dashboard_auth.verify_session_token("not.a.real.token.at.all") is None
+def test_token_matches_is_constant_time_exact():
+    mod = _load_dashboard_auth("s3cret")
+    assert mod.token_matches("s3cret") is True
+    assert mod.token_matches(" s3cret ") is True   # trimmed
+    assert mod.token_matches("s3cre") is False
+    assert mod.token_matches("") is False
 
 
-# ── Cross-service consistency ──────────────────────────────────────────────────
-
-def test_both_modules_produce_same_hash():
-    """Ingestor and dashboard must agree on how to hash an API key (SHA-256)."""
-    key = "pk_live_test_consistency_check"
-    assert ingestor_auth.hash_api_key(key) == dashboard_auth.hash_api_key(key)
+def teardown_module(module):
+    os.environ.pop("AUTH_TOKEN", None)

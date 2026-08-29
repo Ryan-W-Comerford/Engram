@@ -149,7 +149,6 @@
     .event-type-badge   { font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; flex-shrink: 0; letter-spacing: 0.03em; }
     .badge-error        { background: var(--red-dim);   color: var(--red); }
     .badge-trace        { background: var(--blue-dim);  color: var(--blue); }
-    .badge-deployment   { background: var(--green-dim); color: var(--green); }
     .event-detail  { flex: 1; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-family: var(--font-mono); }
     .event-service { font-size: 11px; color: var(--text-3); flex-shrink: 0; }
     .event-time    { font-size: 11px; color: var(--text-3); flex-shrink: 0; font-family: var(--font-mono); }
@@ -239,12 +238,6 @@
         </span>
         Incidents
       </a>
-      <a href="/deployments" class="nav-link {% if page == 'deployments' %}active{% endif %}">
-        <span class="nav-icon">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><polyline points="2,10 7,4 12,10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="4" x2="7" y2="12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        </span>
-        Deployments
-      </a>
 
       <div class="nav-section-label" style="margin-top:14px">Intelligence</div>
       <a href="/digest" class="nav-link {% if page == 'digest' %}active{% endif %}">
@@ -263,13 +256,13 @@
       </a>
     </nav>
 
-    {% if project %}
+    {% if auth_required %}
     <div class="sidebar-project">
       <div class="proj-identity">
-        <div class="proj-avatar">{{ project.name[0].upper() }}</div>
+        <div class="proj-avatar">E</div>
         <div class="proj-info">
-          <div class="proj-name">{{ project.name }}</div>
-          <div class="proj-role">your project</div>
+          <div class="proj-name">Engram</div>
+          <div class="proj-role">signed in</div>
         </div>
         <form method="POST" action="/logout" style="margin:0">
           <button type="submit" class="signout-btn" title="Sign out">

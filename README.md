@@ -1,6 +1,8 @@
 # Engram
 
-Real-time application observability. Instrument your app → events flow through Kafka → Claude analyzes error spikes and writes incident reports → dashboard shows you what broke and why.
+Self-hosted application observability. Instrument your app → events flow through Kafka → Claude analyzes error spikes and writes incident reports → dashboard shows you what broke and why.
+
+Engram is **single-tenant**: you run one instance, it watches one system. There are no accounts, projects, or per-app API keys.
 
 ## How it works
 
@@ -8,7 +10,7 @@ Real-time application observability. Instrument your app → events flow through
 Your App
   │  (Python SDK or any OTel SDK)
   ▼
-Ingestor  (:8000)   ← validates API key, writes to DB + Kafka
+Ingestor  (:8000)   ← writes to DB + Kafka
   │
   ├── PostgreSQL     ← event + incident storage
   │
@@ -21,7 +23,7 @@ Ingestor  (:8000)   ← validates API key, writes to DB + Kafka
                          stores structured report + embedding
                          fires Slack / email alerts
 
-Dashboard (:8080)    ← read-only UI, session-auth via project API key
+Dashboard (:8080)    ← read-only UI
 ```
 
 ---
@@ -42,17 +44,14 @@ Dashboard (:8080)    ← read-only UI, session-auth via project API key
 cp .env.example .env
 ```
 
-Open `.env` and fill in the required values:
+The only values you **must** set are the two AI keys:
 
 | Variable | Required | Description |
 |---|---|---|
-| `ADMIN_API_KEY` | Yes | Protects `POST /projects`. Set to any strong secret you choose. |
 | `ANTHROPIC_API_KEY` | Yes | Claude — for incident analysis |
 | `OPENAI_API_KEY` | Yes | text-embedding-3-small — for similarity search |
-| `DASHBOARD_SECRET_KEY` | Yes | Signs session cookies. Generate: `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `OTEL_BEARER_TOKEN` | Yes | Authenticates OTel exporters. Generate the same way. |
-| `POSTGRES_PASSWORD` | Yes | DB password (default `pulseai_dev` is fine for local dev) |
-| `GITHUB_WEBHOOK_SECRET` | No | Enables GitHub push → deployment event correlation |
+| `AUTH_TOKEN` | No | Leave blank and Engram runs open (no dashboard login, no token on ingest). Set it to require that token everywhere — see [Access control](#access-control). |
+| `POSTGRES_PASSWORD` | No | DB password (default is fine for local dev) |
 | `SLACK_WEBHOOK_URL` | No | Incident alerts via Slack |
 | `SENDGRID_API_KEY` | No | Incident alerts via email |
 
@@ -62,35 +61,24 @@ Open `.env` and fill in the required values:
 docker compose up --build
 ```
 
-Kafka takes ~30 seconds to initialize on first boot. Wait until you see the ingestor log:
-```
-AI service started | topic=engram.alerts.anomalies
-```
+Kafka takes ~30 seconds to initialize on first boot. Migrations run automatically and seed the single implicit project — there is nothing to create.
 
-### 3. Create your first project
+### 3. Open the dashboard
 
-```bash
-curl -s -X POST http://localhost:8000/projects \
-  -H "Content-Type: application/json" \
-  -H "X-Admin-Key: <your-ADMIN_API_KEY>" \
-  -d '{"name": "my-app"}' | python3 -m json.tool
-```
+Go to **http://localhost:8080**. If `AUTH_TOKEN` is unset, you're straight in. If it's set, enter that token once.
 
-Response:
-```json
-{
-  "project_id": "abb7108b-...",
-  "name": "my-app",
-  "api_key": "pk_live_ef568530...",
-  "created_at": "2026-01-01T00:00:00"
-}
-```
+---
 
-**Save the `api_key` — it is shown only once.** This is what you use to sign in to the dashboard and authenticate your app's events.
+## Access control
 
-### 4. Open the dashboard
+Engram has no user accounts. Access is governed by one optional shared secret, `AUTH_TOKEN`:
 
-Go to **http://localhost:8080** and paste your `api_key` to sign in.
+| `AUTH_TOKEN` | Dashboard | `POST /ingest` | OTel collector |
+|---|---|---|---|
+| **unset** (default) | no login | open | open |
+| **set** | one-field token login | `Authorization: Bearer <token>` required | swap in `otel-collector-config.auth.yaml` (see `docker-compose.yml`) |
+
+Leaving it unset is fine for localhost or a private network. Set it if the ports are reachable from anywhere else, and put the instance behind your own TLS/reverse proxy.
 
 ---
 
@@ -106,10 +94,10 @@ pip install -e ./sdk
 from engram_sdk import Engram
 
 pulse = Engram(
-    api_key="pk_live_...",         # or set ENGRAM_API_KEY env var
     host="http://localhost:8000",  # or set ENGRAM_HOST env var
     environment="production",
     service="my-api",
+    # token="..."  only if this instance sets AUTH_TOKEN (or set ENGRAM_TOKEN)
 )
 pulse.auto_instrument(app)  # works with FastAPI and Flask
 ```
@@ -130,41 +118,25 @@ except TimeoutError as e:
 
 ### Option B — OpenTelemetry (any language)
 
-Set two environment variables before starting your app:
+Point your exporter at the collector:
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <your-OTEL_BEARER_TOKEN>"
+# only if AUTH_TOKEN is set (and you swapped in otel-collector-config.auth.yaml):
+# export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <AUTH_TOKEN>"
 ```
 
-Then add the `engram.project_id` resource attribute so Engram knows which project to route events to:
+No `engram.project_id` attribute is needed — everything is attributed to the one implicit project.
 
 ```bash
 # Python (zero code changes with opentelemetry-instrument)
 opentelemetry-instrument \
   --service_name my-api \
-  --resource_attributes "engram.project_id=<your-project-id>,deployment.environment=production" \
+  --resource_attributes "deployment.environment=production" \
   python app.py
 ```
 
 See [QUICKSTART.md](./QUICKSTART.md) for Node.js, Java, Go, Ruby, .NET, and C# examples.
-
----
-
-## Environment strategy
-
-Create a separate project per environment so dev/QA noise never reaches your production incident feed:
-
-```bash
-for env in dev staging production; do
-  curl -s -X POST http://localhost:8000/projects \
-    -H "Content-Type: application/json" \
-    -H "X-Admin-Key: <your-ADMIN_API_KEY>" \
-    -d "{\"name\": \"my-app-$env\"}" | python3 -m json.tool
-done
-```
-
-Each project gets its own API key and isolated dashboard view.
 
 ---
 
@@ -175,7 +147,8 @@ The detector fires when error rate spikes to **1.5× the baseline average** with
 ### Option A — trigger script (quickest)
 
 ```bash
-python tests/trigger_incident.py --api-key pk_live_...
+python tests/trigger_incident.py
+# add --token <AUTH_TOKEN> only if this instance sets one
 ```
 
 The script sends 5 baseline errors, waits for the minute to roll over, then fires 20 errors in the new window — enough to trip the 1.5× threshold. It then waits up to 90 seconds and tells you to check the dashboard.
@@ -183,9 +156,8 @@ The script sends 5 baseline errors, waits for the minute to roll over, then fire
 ### Option B — example app + curl
 
 ```bash
-export ENGRAM_API_KEY="pk_live_..."
 pip install -e "./sdk[dev]"
-python sdk/example_app.py
+python sdk/example_app.py     # add ENGRAM_TOKEN=... if AUTH_TOKEN is set
 # → listening on http://localhost:9000
 ```
 
@@ -202,7 +174,7 @@ watch -n 0.5 curl -s http://localhost:9000/explode
 Watch the processor detect the spike:
 ```bash
 docker compose logs -f processor
-# → 🚨 ANOMALY CONFIRMED [project-id] | errors=47 baseline=1.2 ratio=39.2×
+# → 🚨 ANOMALY CONFIRMED | errors=47 baseline=1.2 ratio=39.2×
 ```
 
 Then watch Claude analyze it:
@@ -212,20 +184,6 @@ docker compose logs -f ai
 ```
 
 The incident appears on your dashboard within seconds.
-
----
-
-## GitHub webhook (deployment correlation)
-
-When an error spike follows a deployment, Claude will correlate them. Set it up:
-
-1. Set `GITHUB_WEBHOOK_SECRET` in `.env` to any strong secret
-2. Restart the ingestor: `docker compose restart ingestor`
-3. Add the webhook in your GitHub repo → Settings → Webhooks:
-   - **Payload URL:** `http://<your-host>:8000/webhooks/github/<project-id>`
-   - **Content type:** `application/json`
-   - **Secret:** your `GITHUB_WEBHOOK_SECRET`
-   - **Events:** just the `push` event
 
 ---
 
@@ -250,8 +208,7 @@ When an error spike follows a deployment, Claude will correlate them. Set it up:
 | Service | URL | Description |
 |---|---|---|
 | Dashboard | http://localhost:8080 | Main UI |
-| Ingestor API | http://localhost:8000 | Event ingest + admin |
-| Ingestor docs | http://localhost:8000/docs | Swagger UI |
+| Ingestor API | http://localhost:8000 | Event ingest (`POST /ingest`) |
 | OTel gRPC | localhost:4317 | OTel exporter endpoint |
 | OTel HTTP | localhost:4318 | OTel HTTP exporter endpoint |
 | Kafka | localhost:9094 | External broker (for debugging) |
@@ -265,15 +222,16 @@ When an error spike follows a deployment, Claude will correlate them. Set it up:
 Engram/
 ├── shared/
 │   ├── db/
-│   │   ├── models.py          SQLAlchemy models (Project, Event, Incident, DailyDigest)
+│   │   ├── models.py          SQLAlchemy models (Event, Incident, DailyDigest)
 │   │   ├── session.py         Engine + get_db dependency
+│   │   ├── tenant.py          get_or_create_default_project (single-tenant helper)
 │   │   └── similarity.py      pgvector cosine similarity helpers
 │   ├── otel_normalizer.py     OTel JSON → Engram event schema translation
 │   ├── kafka_config.py        Shared Kafka producer/consumer config
 │   └── logging_config.py      Structured JSON logging
 ├── migrations/                Alembic migrations
 ├── services/
-│   ├── ingestor/              FastAPI — event ingest + project admin API
+│   ├── ingestor/              FastAPI — event ingest API
 │   ├── processor/             Kafka consumer — sliding-window anomaly detection
 │   ├── ai/                    Kafka consumer — Claude incident analysis + daily digests
 │   └── dashboard/             FastAPI + Jinja2 — read-only dashboard UI
@@ -306,11 +264,12 @@ alembic revision --autogenerate -m "describe your change"
 ## Health checks
 
 ```bash
-# Ingestor (Kafka + DB)
-curl http://localhost:8000/health
-# → {"status":"ok","kafka":"ok","db":"ok"}
+# Liveness
+curl http://localhost:8000/health          # → {"status":"ok"}
+curl http://localhost:8080/health          # → {"status":"ok"}
 
-# Dashboard
-curl http://localhost:8080/health
-# → {"status":"ok"}
+# Ingestor dependency check (Kafka + DB). Add -H "Authorization: Bearer <AUTH_TOKEN>"
+# if AUTH_TOKEN is set.
+curl http://localhost:8000/internal/health
+# → {"status":"ok","kafka":"ok","db":"ok"}
 ```

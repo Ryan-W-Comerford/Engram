@@ -1,13 +1,12 @@
 """
 Analyzer — the heart of Phase 3.
 
-Takes an anomaly signal + DB context (recent errors + deployments) and calls
-Claude to produce a structured incident report.
+Takes an anomaly signal + DB context (recent errors) and calls Claude to
+produce a structured incident report.
 
 The prompt is engineered to give Claude everything it needs:
   - Quantitative anomaly data (error counts, spike ratio, time window)
   - Error patterns grouped by exception type with sample stack traces
-  - Deployment timeline with commit messages and timing relative to the spike
   - Strict JSON output contract so the response is always parseable
 
 Claude response schema:
@@ -15,9 +14,7 @@ Claude response schema:
   "title": "Brief one-line description of the incident",
   "severity": "low|medium|high|critical",
   "root_cause_hypothesis": "Claude's best explanation of why this is happening",
-  "evidence": "Specific evidence from the errors/deployments supporting the hypothesis",
-  "deployment_correlated": true|false,
-  "deployment_explanation": "Why this deployment is/isn't likely the cause (if applicable)",
+  "evidence": "Specific evidence from the errors supporting the hypothesis",
   "affected_endpoints": ["/api/orders", "/api/users"],
   "recommended_actions": ["action 1", "action 2", "action 3"]
 }
@@ -27,7 +24,6 @@ import json
 import logging
 import os
 from collections import defaultdict
-from datetime import datetime, timezone
 from typing import Optional
 
 import anthropic
@@ -93,36 +89,9 @@ def _group_errors(error_events: list[Event]) -> list[dict]:
     ]
 
 
-def _format_deployments(deployment_events: list[Event], anomaly_detected_at: datetime) -> list[dict]:
-    """Format deployment events with timing relative to when the anomaly was detected."""
-    result = []
-    for event in deployment_events:
-        data = event.raw_data or {}
-        ts = event.timestamp
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-
-        detected_utc = anomaly_detected_at
-        if detected_utc.tzinfo is None:
-            detected_utc = detected_utc.replace(tzinfo=timezone.utc)
-
-        minutes_before = round((detected_utc - ts).total_seconds() / 60, 1)
-        result.append({
-            "commit_sha": data.get("commit_sha", "unknown"),
-            "branch": data.get("branch", "unknown"),
-            "pusher": data.get("pusher"),
-            "commit_message": data.get("commit_message", ""),
-            "environment": event.environment,
-            "minutes_before_anomaly": minutes_before,
-        })
-
-    return sorted(result, key=lambda d: d["minutes_before_anomaly"])
-
-
 def _build_prompt(
     anomaly_signal: dict,
     error_groups: list[dict],
-    deployment_context: list[dict],
     similar_incidents_text: str = "",
 ) -> str:
     detected_at = anomaly_signal.get("detected_at", "unknown")
@@ -132,11 +101,6 @@ def _build_prompt(
     current_bucket = anomaly_signal.get("current_bucket", "unknown")
 
     error_section = json.dumps(error_groups, indent=2)
-    deployment_section = (
-        json.dumps(deployment_context, indent=2)
-        if deployment_context
-        else "No deployments detected in the 30 minutes before this anomaly."
-    )
 
     history_section = ""
     if similar_incidents_text and "No similar" not in similar_incidents_text:
@@ -160,9 +124,6 @@ reference what worked before.
 
 ## Error Breakdown (last 30 minutes)
 {error_section}
-
-## Deployment Timeline (last 30 minutes before anomaly)
-{deployment_section}
 {history_section}
 ## Your Task
 Analyze this incident and return a JSON object with your findings.
@@ -181,9 +142,7 @@ Return ONLY a valid JSON object. No markdown, no backticks, no explanation outsi
   "title": "one-line incident title (max 100 chars)",
   "severity": "low|medium|high|critical",
   "root_cause_hypothesis": "your best explanation of the root cause",
-  "evidence": "specific evidence from the error data and deployments supporting your hypothesis",
-  "deployment_correlated": true or false,
-  "deployment_explanation": "why this deployment is or is not likely the cause, or null if no deployments",
+  "evidence": "specific evidence from the error data supporting your hypothesis",
   "affected_endpoints": ["list", "of", "endpoints"],
   "exception_types_seen": ["ExceptionType1", "ExceptionType2"],
   "recommended_actions": ["action 1", "action 2", "action 3"],
@@ -197,7 +156,6 @@ Return ONLY a valid JSON object. No markdown, no backticks, no explanation outsi
 def analyze_incident(
     anomaly_signal: dict,
     error_events: list[Event],
-    deployment_events: list[Event],
     similar_incidents_text: str = "",
 ) -> Optional[dict]:
     """
@@ -208,19 +166,11 @@ def analyze_incident(
         logger.warning("No error events to analyze — skipping Claude call")
         return None
 
-    detected_at_raw = anomaly_signal.get("detected_at", "")
-    try:
-        detected_at = datetime.fromisoformat(detected_at_raw)
-    except (ValueError, TypeError):
-        detected_at = datetime.now(timezone.utc)
-
     error_groups = _group_errors(error_events)
-    deployment_context = _format_deployments(deployment_events, detected_at)
-    prompt = _build_prompt(anomaly_signal, error_groups, deployment_context, similar_incidents_text)
+    prompt = _build_prompt(anomaly_signal, error_groups, similar_incidents_text)
 
     logger.info(
-        f"Calling Claude | model={MODEL} "
-        f"error_groups={len(error_groups)} deployments={len(deployment_context)}"
+        f"Calling Claude | model={MODEL} error_groups={len(error_groups)}"
     )
 
     try:
@@ -256,8 +206,7 @@ def analyze_incident(
         logger.info(
             f"Claude analysis complete | "
             f"title={result.get('title', 'N/A')!r} "
-            f"severity={result.get('severity')} "
-            f"deployment_correlated={result.get('deployment_correlated')}"
+            f"severity={result.get('severity')}"
         )
         return result
 

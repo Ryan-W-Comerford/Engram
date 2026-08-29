@@ -211,8 +211,8 @@ def test_normalize_otel_error_span():
     assert "duration_ms" not in e["data"]
 
 
-def test_normalize_otel_span_missing_project_id_skipped():
-    """Spans without engram.project_id must be silently dropped."""
+def test_normalize_otel_span_without_project_id_uses_default():
+    """Engram is single-tenant: spans with no engram.project_id go to the default project."""
     span = {
         "name": "GET /health",
         "startTimeUnixNano": 1_000_000_000_000_000_000,
@@ -225,28 +225,8 @@ def test_normalize_otel_span_missing_project_id_skipped():
     }
     payload = _wrap_span(span)
     events = normalize(payload)
-    assert events == []
-
-
-def test_normalize_otel_deployment_span():
-    deploy_attrs = [
-        {"key": "engram.event_type",        "value": {"stringValue": "deployment"}},
-        {"key": "deployment.commit_sha",    "value": {"stringValue": "abc123"}},
-        {"key": "deployment.branch",        "value": {"stringValue": "main"}},
-        {"key": "deployment.pusher",        "value": {"stringValue": "alice"}},
-        {"key": "deployment.commits_count", "value": {"intValue": 3}},
-    ]
-    span = _make_span(extra_attrs=deploy_attrs)
-    payload = _wrap_span(span)
-    events = normalize(payload)
-
     assert len(events) == 1
-    e = events[0]
-    assert e["event_type"] == "deployment"
-    assert e["data"]["commit_sha"] == "abc123"
-    assert e["data"]["branch"] == "main"
-    assert e["data"]["pusher"] == "alice"
-    assert e["data"]["commits_count"] == 3
+    assert events[0]["project_id"] == "00000000-0000-0000-0000-000000000001"
 
 
 # ── normalize — OTel log format ───────────────────────────────────────────────

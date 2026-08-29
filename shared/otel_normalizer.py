@@ -15,7 +15,7 @@ Engram internal event schema (what the rest of the pipeline expects):
   {
     "event_id":    str,
     "project_id":  str,
-    "event_type":  "error" | "trace" | "deployment",
+    "event_type":  "error" | "trace",
     "timestamp":   ISO-8601 str,
     "environment": str,
     "service":     str | None,
@@ -37,6 +37,10 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _NS_PER_MS = 1_000_000
+
+# Engram is single-tenant. OTel payloads that don't carry an explicit
+# engram.project_id attribute are attributed to the one implicit project.
+_DEFAULT_PROJECT_ID = "00000000-0000-0000-0000-000000000001"
 
 
 def _ns_to_iso(ns: Optional[int]) -> str:
@@ -69,39 +73,17 @@ def _span_to_event(span: dict, resource: dict) -> Optional[dict]:
     """Convert a single OTel span into a Engram event dict, or None if unroutable."""
     attrs = span.get("attributes", [])
 
-    project_id = _attr(attrs, "engram.project_id") or _resource_attr(resource, "engram.project_id")
-    if not project_id:
-        logger.debug("Span missing engram.project_id — skipping")
-        return None
+    project_id = (
+        _attr(attrs, "engram.project_id")
+        or _resource_attr(resource, "engram.project_id")
+        or _DEFAULT_PROJECT_ID
+    )
 
     timestamp   = _ns_to_iso(span.get("startTimeUnixNano"))
     service     = _attr(attrs, "service.name") or _resource_attr(resource, "service.name")
+    # deployment.environment here is the OTel semantic-convention env name
+    # (production/staging/…), not a deployment event.
     environment = _attr(attrs, "deployment.environment") or _resource_attr(resource, "deployment.environment") or "production"
-
-    # ── Deployment span (emitted by the GitHub webhook handler) ───────────────
-    # Detected by the engram.event_type attribute set in webhooks.py.
-    # Span name "deployment" is a secondary signal for forward compatibility.
-    pulseai_event_type = _attr(attrs, "engram.event_type")
-    is_deployment = pulseai_event_type == "deployment" or span.get("name") == "deployment"
-
-    if is_deployment:
-        return {
-            "event_id":    str(uuid.uuid4()),
-            "project_id":  project_id,
-            "event_type":  "deployment",
-            "timestamp":   timestamp,
-            "environment": environment,
-            "service":     service,
-            "data": {
-                "commit_sha":      _attr(attrs, "deployment.commit_sha"),
-                "branch":          _attr(attrs, "deployment.branch"),
-                "pusher":          _attr(attrs, "deployment.pusher"),
-                "commit_message":  _attr(attrs, "deployment.commit_message"),
-                "commits_count":   int(_attr(attrs, "deployment.commits_count") or 0),
-                "repository":      _attr(attrs, "deployment.repository"),
-            },
-            "_source": "otel",
-        }
 
     # ── Error / trace span ────────────────────────────────────────────────────
     # OTel status code 2 = ERROR
@@ -147,10 +129,11 @@ def _log_to_event(log_record: dict, resource: dict) -> Optional[dict]:
     """Convert an OTel LogRecord into a Engram event dict, or None if unroutable."""
     attrs = log_record.get("attributes", [])
 
-    project_id = _attr(attrs, "engram.project_id") or _resource_attr(resource, "engram.project_id")
-    if not project_id:
-        logger.debug("LogRecord missing engram.project_id — skipping")
-        return None
+    project_id = (
+        _attr(attrs, "engram.project_id")
+        or _resource_attr(resource, "engram.project_id")
+        or _DEFAULT_PROJECT_ID
+    )
 
     # Severity number >= 17 means ERROR or above in OTel
     severity_number = log_record.get("severityNumber", 0)
@@ -225,7 +208,7 @@ def normalize(raw_payload: dict) -> list[dict]:
         })
         return events
 
-    # OTel trace payload (spans — includes deployment spans from webhooks)
+    # OTel trace payload (spans)
     for resource_span in raw_payload.get("resourceSpans", []):
         resource = resource_span.get("resource", {})
         for scope_span in resource_span.get("scopeSpans", []):

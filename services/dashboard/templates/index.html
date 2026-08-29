@@ -87,7 +87,6 @@
 }
 .st-badge.b-error      { background: var(--red-dim);   color: var(--red); }
 .st-badge.b-trace      { background: var(--blue-dim);  color: var(--blue); }
-.st-badge.b-deployment { background: var(--green-dim); color: var(--green); }
 .st-detail { font-size: 12px; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .st-svc    { font-size: 10px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .st-time   { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); text-align: right; }
@@ -114,19 +113,6 @@
 .is-open          { background: var(--red-dim);   color: var(--red); }
 .is-investigating  { background: var(--amber-dim); color: var(--amber); }
 .is-resolved      { background: var(--green-dim); color: var(--green); }
-
-/* ── Deployments (right column) ── */
-.dep-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 16px;
-  border-bottom: 1px solid var(--border);
-  transition: background 0.1s;
-}
-.dep-row:last-child { border-bottom: none; }
-.dep-row:hover { background: var(--bg-3); }
-.dep-sha    { font-family: var(--font-mono); font-size: 11px; color: var(--green); background: rgba(52,211,153,0.10); padding: 1px 6px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(52,211,153,0.15); }
-.dep-branch { flex: 1; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dep-time   { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); flex-shrink: 0; }
 
 /* ── Right column divider ── */
 .rc-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
@@ -250,7 +236,7 @@
 
   </div>
 
-  <!-- Right column: incidents + deployments -->
+  <!-- Right column: incidents + daily report -->
   <div class="ov-right">
 
     <div class="sh">
@@ -276,31 +262,6 @@
       <div class="empty-inline">
         <div style="font-size:18px;opacity:0.15;margin-bottom:6px">✓</div>
         No incidents
-      </div>
-    {% endif %}
-    </div>
-
-    <hr class="rc-divider">
-
-    <div class="sh">
-      <span class="sh-title">Deployments</span>
-      <a href="/deployments" class="sh-link">View all →</a>
-    </div>
-
-    <div style="min-height:102px;">
-    {% if recent_deployments %}
-      {% for dep in recent_deployments[:3] %}
-      {% set dd = dep.raw_data %}
-      <div class="dep-row">
-        <span class="dep-sha">{{ (dd.get('commit_sha') or '?')[:7] }}</span>
-        <span class="dep-branch">{{ dd.get('branch', '?') }}</span>
-        <span class="dep-time">{{ dep.timestamp.strftime('%b %d %H:%M') }}</span>
-      </div>
-      {% endfor %}
-    {% else %}
-      <div class="empty-inline">
-        <div style="font-size:18px;opacity:0.15;margin-bottom:6px">⬆</div>
-        No deployments
       </div>
     {% endif %}
     </div>
@@ -383,27 +344,6 @@ const chart = new Chart(ctx, {
   }
 });
 
-let deploymentBuckets = [];
-Chart.register({
-  id: 'deployLines',
-  afterDraw(chart) {
-    const { ctx, scales: { x, y } } = chart;
-    deploymentBuckets.forEach(bucket => {
-      const idx = chart.data.labels.indexOf(bucket);
-      if (idx === -1) return;
-      const xPos = x.getPixelForValue(idx);
-      ctx.save();
-      ctx.strokeStyle = 'rgba(129,140,248,0.4)';
-      ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
-      ctx.beginPath(); ctx.moveTo(xPos, y.top); ctx.lineTo(xPos, y.bottom); ctx.stroke();
-      ctx.fillStyle = 'rgba(129,140,248,0.7)';
-      ctx.font = '9px JetBrains Mono';
-      ctx.fillText('deploy', xPos + 4, y.top + 10);
-      ctx.restore();
-    });
-  }
-});
-
 async function refreshChart() {
   try {
     const res  = await fetch('/api/metrics');
@@ -411,7 +351,6 @@ async function refreshChart() {
     chart.data.labels           = data.labels;
     chart.data.datasets[0].data = data.errors;
     chart.data.datasets[1].data = data.traces;
-    deploymentBuckets = data.deployments || [];
     chart.update('none');
     const total = data.errors.reduce((a,b)=>a+b,0) + data.traces.reduce((a,b)=>a+b,0);
     document.getElementById('chart-status').textContent = `${total} events`;

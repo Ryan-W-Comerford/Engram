@@ -17,7 +17,6 @@
 .type-filter-btn.active { background: var(--accent-dim); border-color: rgba(129,140,248,0.35); color: var(--accent); }
 .type-filter-btn.f-error.active   { background: var(--red-dim);   border-color: rgba(248,113,113,0.35); color: var(--red); }
 .type-filter-btn.f-trace.active   { background: var(--blue-dim);  border-color: rgba(96,165,250,0.35);  color: var(--blue); }
-.type-filter-btn.f-deployment.active { background: var(--green-dim); border-color: rgba(52,211,153,0.35); color: var(--green); }
 
 .pause-btn {
   margin-left: auto;
@@ -186,27 +185,6 @@ const chart = new Chart(ctx, {
   }
 });
 
-let deploymentBuckets = [];
-Chart.register({
-  id: 'deployLines',
-  afterDraw(chart) {
-    const { ctx, scales: { x, y } } = chart;
-    deploymentBuckets.forEach(bucket => {
-      const idx = chart.data.labels.indexOf(bucket);
-      if (idx === -1) return;
-      const xPos = x.getPixelForValue(idx);
-      ctx.save();
-      ctx.strokeStyle = 'rgba(129,140,248,0.5)';
-      ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.moveTo(xPos, y.top); ctx.lineTo(xPos, y.bottom); ctx.stroke();
-      ctx.fillStyle = 'rgba(129,140,248,0.8)';
-      ctx.font = '9px JetBrains Mono';
-      ctx.fillText('deploy', xPos + 4, y.top + 11);
-      ctx.restore();
-    });
-  }
-});
-
 async function refreshChart() {
   try {
     const res  = await fetch('/api/metrics');
@@ -214,7 +192,6 @@ async function refreshChart() {
     chart.data.labels           = data.labels;
     chart.data.datasets[0].data = data.errors;
     chart.data.datasets[1].data = data.traces;
-    deploymentBuckets = data.deployments || [];
     chart.update('none');
     const total = data.errors.reduce((a,b)=>a+b,0) + data.traces.reduce((a,b)=>a+b,0);
     document.getElementById('chart-status').textContent = `${total} events`;
@@ -289,8 +266,7 @@ function esc(str) {
 // ── Summary line for an event ───────────────────────────────────────────────
 function eventDetail(ev) {
   const d = ev.raw_data || {};
-  if (ev.type === 'error')      return d.exception_type || d.message || 'Error';
-  if (ev.type === 'deployment') return `${(d.commit_sha||'?').slice(0,7)} on ${d.branch||'?'}`;
+  if (ev.type === 'error') return d.exception_type || d.message || 'Error';
   return `${d.method||'GET'} ${d.endpoint||'/'} ${d.status_code||''}`.trim();
 }
 
