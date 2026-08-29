@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .client import PulseAI
+    from .client import Engram
 
 
 # ── FastAPI / Starlette ────────────────────────────────────────────────────────
@@ -28,17 +28,17 @@ try:
         """
         Add to your FastAPI app:
 
-            from engram_sdk import PulseAI
-            pulse = Engram(host="http://localhost:8000")
-            pulse.auto_instrument(app)   # ← one line
+            from engram_sdk import Engram
+            engram = Engram(host="http://localhost:8000")
+            engram.auto_instrument(app)   # ← one line
 
         Every request generates a trace event. Unhandled exceptions also
         generate an error event with the full stack trace attached.
         """
 
-        def __init__(self, app, pulse: "Engram") -> None:
+        def __init__(self, app, engram: "Engram") -> None:
             super().__init__(app)
-            self._pulse = pulse
+            self._engram = engram
 
         async def dispatch(self, request: Request, call_next) -> Response:
             start = time.perf_counter()
@@ -57,7 +57,7 @@ try:
 
                 if exc_info and exc_info[0] is not None:
                     exc_type, exc_value, tb = exc_info
-                    self._pulse.capture_error(
+                    self._engram.capture_error(
                         exception_type=exc_type.__name__,
                         message=str(exc_value),
                         stack_trace="".join(traceback.format_tb(tb)),
@@ -68,14 +68,14 @@ try:
                     status_code = response.status_code
                     # Capture 5xx responses as errors too — they indicate server faults
                     if status_code >= 500:
-                        self._pulse.capture_error(
+                        self._engram.capture_error(
                             exception_type="HTTPServerError",
                             message=f"{method} {endpoint} returned {status_code}",
                             endpoint=endpoint,
                             method=method,
                         )
 
-                    self._pulse.capture_trace(
+                    self._engram.capture_trace(
                         endpoint=endpoint,
                         method=method,
                         status_code=status_code,
@@ -104,13 +104,13 @@ try:
         """
         Add to your Flask app:
 
-            from engram_sdk import PulseAI
-            pulse = Engram(host="http://localhost:8000")
-            pulse.auto_instrument(app)   # ← one line
+            from engram_sdk import Engram
+            engram = Engram(host="http://localhost:8000")
+            engram.auto_instrument(app)   # ← one line
         """
 
-        def __init__(self, app: "_flask.Flask", pulse: "Engram") -> None:
-            self._pulse = pulse
+        def __init__(self, app: "_flask.Flask", engram: "Engram") -> None:
+            self._engram = engram
             self._register(app)
 
         def _register(self, app: "_flask.Flask") -> None:
@@ -130,14 +130,14 @@ try:
             status_code = response.status_code
 
             if status_code >= 500:
-                self._pulse.capture_error(
+                self._engram.capture_error(
                     exception_type="HTTPServerError",
                     message=f"{method} {endpoint} returned {status_code}",
                     endpoint=endpoint,
                     method=method,
                 )
 
-            self._pulse.capture_trace(
+            self._engram.capture_trace(
                 endpoint=endpoint,
                 method=method,
                 status_code=status_code,
@@ -148,7 +148,7 @@ try:
         def _teardown_request(self, exc: Exception | None) -> None:
             if exc is not None:
                 tb = traceback.format_exc()
-                self._pulse.capture_error(
+                self._engram.capture_error(
                     exception_type=type(exc).__name__,
                     message=str(exc),
                     stack_trace=tb,

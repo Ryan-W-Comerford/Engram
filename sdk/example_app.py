@@ -22,12 +22,12 @@ from engram_sdk import Engram
 
 app = FastAPI(title="Engram Example App")
 
-pulse = Engram(
+engram = Engram(
     host=os.getenv("ENGRAM_HOST", "http://localhost:8000"),
     environment="production",
     service="example-api",
 )
-pulse.auto_instrument(app)
+engram.auto_instrument(app)
 
 
 @app.get("/ok")

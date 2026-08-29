@@ -93,13 +93,13 @@ pip install -e ./sdk
 ```python
 from engram_sdk import Engram
 
-pulse = Engram(
+engram = Engram(
     host="http://localhost:8000",  # or set ENGRAM_HOST env var
     environment="production",
     service="my-api",
     # token="..."  only if this instance sets AUTH_TOKEN (or set ENGRAM_TOKEN)
 )
-pulse.auto_instrument(app)  # works with FastAPI and Flask
+engram.auto_instrument(app)  # works with FastAPI and Flask
 ```
 
 Manual capture (for caught exceptions you still want to track):
@@ -108,7 +108,7 @@ Manual capture (for caught exceptions you still want to track):
 try:
     result = call_external_api()
 except TimeoutError as e:
-    pulse.capture_error(
+    engram.capture_error(
         exception_type="TimeoutError",
         message=str(e),
         endpoint="/api/payments",
@@ -254,7 +254,7 @@ Engram/
 
 ```bash
 pip install -r services/ingestor/requirements.txt
-export DATABASE_URL=postgresql://pulseai:pulseai_dev@localhost:5432/pulseai
+export DATABASE_URL=postgresql://engram:engram_dev@localhost:5432/engram
 alembic upgrade head
 alembic revision --autogenerate -m "describe your change"
 ```
@@ -273,3 +273,9 @@ curl http://localhost:8080/health          # → {"status":"ok"}
 curl http://localhost:8000/internal/health
 # → {"status":"ok","kafka":"ok","db":"ok"}
 ```
+
+---
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

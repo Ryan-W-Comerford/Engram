@@ -10,7 +10,7 @@ Output format (one JSON object per line):
   {
     "timestamp": "2026-06-14T12:00:00.123Z",
     "level": "INFO",
-    "logger": "pulseai.ingestor",
+    "logger": "engram.ingestor",
     "service": "ingestor",
     "message": "Ingested error event abc-123"
   }

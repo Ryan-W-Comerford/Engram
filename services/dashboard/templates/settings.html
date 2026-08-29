@@ -39,13 +39,13 @@
     <div class="code-block">
 <span class="kw">from</span> engram_sdk <span class="kw">import</span> Engram<br>
 <br>
-pulse = <span class="fn">Engram</span>(<br>
+engram = <span class="fn">Engram</span>(<br>
 &nbsp;&nbsp;&nbsp;&nbsp;host=<span class="st">"{{ ingestor_host }}"</span>,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;environment=<span class="st">"production"</span>,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;service=<span class="st">"my-api"</span>,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<span class="c"># token=&quot;…&quot; only if this instance sets AUTH_TOKEN</span><br>
 )<br>
-pulse.<span class="fn">auto_instrument</span>(app)  <span class="c"># wraps FastAPI or Flask</span>
+engram.<span class="fn">auto_instrument</span>(app)  <span class="c"># wraps FastAPI or Flask</span>
     </div>
 
     <div class="field-label" style="margin-top:18px">3 · Manual capture (optional)</div>
@@ -53,7 +53,7 @@ pulse.<span class="fn">auto_instrument</span>(app)  <span class="c"># wraps Fast
 <span class="kw">try</span>:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;result = <span class="fn">call_external_api</span>()<br>
 <span class="kw">except</span> TimeoutError <span class="kw">as</span> e:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;pulse.<span class="fn">capture_error</span>(exception_type=<span class="st">"TimeoutError"</span>, message=<span class="fn">str</span>(e))
+&nbsp;&nbsp;&nbsp;&nbsp;engram.<span class="fn">capture_error</span>(exception_type=<span class="st">"TimeoutError"</span>, message=<span class="fn">str</span>(e))
     </div>
   </div>
 </div>

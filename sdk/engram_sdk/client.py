@@ -4,12 +4,12 @@ Engram SDK client.
 Usage (FastAPI):
     from engram_sdk import Engram
 
-    pulse = Engram(host="http://localhost:8000")   # add token=... if the
-    pulse.auto_instrument(app)                      # instance sets AUTH_TOKEN
+    engram = Engram(host="http://localhost:8000")   # add token=... if the
+    engram.auto_instrument(app)                      # instance sets AUTH_TOKEN
 
 Usage (manual):
-    pulse.capture_error(exception_type="ValueError", message="bad input")
-    pulse.capture_trace(endpoint="/api/orders", method="POST", status_code=200, duration_ms=94.3)
+    engram.capture_error(exception_type="ValueError", message="bad input")
+    engram.capture_trace(endpoint="/api/orders", method="POST", status_code=200, duration_ms=94.3)
 """
 
 import atexit
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class Engram:
     """
-    Main PulseAI client. Instantiate once per application, then call
+    Main Engram client. Instantiate once per application, then call
     auto_instrument(app) to enable automatic event capture.
     """
 
@@ -65,21 +65,21 @@ class Engram:
 
     def auto_instrument(self, app) -> None:
         """
-        Attach PulseAI middleware to a FastAPI or Flask application.
+        Attach Engram middleware to a FastAPI or Flask application.
         Detects the framework automatically.
 
         Call this once after creating your app:
             app = FastAPI()
-            pulse.auto_instrument(app)
+            engram.auto_instrument(app)
         """
         app_type = type(app).__module__
 
         if "fastapi" in app_type or "starlette" in app_type:
-            app.add_middleware(EngramFastAPIMiddleware, pulse=self)
-            logger.info("PulseAI FastAPI middleware attached")
+            app.add_middleware(EngramFastAPIMiddleware, engram=self)
+            logger.info("Engram FastAPI middleware attached")
         elif "flask" in app_type:
-            EngramFlaskMiddleware(app, pulse=self)
-            logger.info("PulseAI Flask middleware attached")
+            EngramFlaskMiddleware(app, engram=self)
+            logger.info("Engram Flask middleware attached")
         else:
             raise TypeError(
                 f"Unsupported framework: {app_type}. "
@@ -104,7 +104,7 @@ class Engram:
             try:
                 result = call_external_api()
             except TimeoutError as e:
-                pulse.capture_error(
+                engram.capture_error(
                     exception_type="TimeoutError",
                     message=str(e),
                     endpoint="/api/payments",

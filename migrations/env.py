@@ -25,7 +25,7 @@ def get_url() -> str:
     # support DDL inside transactions).  Falls back to DATABASE_URL for local dev.
     return os.getenv(
         "MIGRATIONS_DATABASE_URL",
-        os.getenv("DATABASE_URL", "postgresql://pulseai:pulseai_dev@localhost:5432/pulseai"),
+        os.getenv("DATABASE_URL", "postgresql://engram:engram_dev@localhost:5432/engram"),
     )
 
 
