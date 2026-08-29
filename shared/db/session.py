@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://pulseai:pulseai_dev@localhost:5432/pulseai",
+    "postgresql://engram:engram_dev@localhost:5432/engram",
 )
 
 engine = create_engine(

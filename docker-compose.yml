@@ -41,13 +41,13 @@ services:
     # Formula: (pool_size + max_overflow) × service_count < max_connections
     command: ["postgres", "-c", "max_connections=200"]
     environment:
-      POSTGRES_DB: pulseai
-      POSTGRES_USER: pulseai
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pulseai_dev}
+      POSTGRES_DB: engram
+      POSTGRES_USER: engram
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-engram_dev}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pulseai -d pulseai"]
+      test: ["CMD-SHELL", "pg_isready -U engram -d engram"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -104,10 +104,10 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
+      - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram_dev}@postgres:5432/engram
       # Point Alembic migrations at the direct Postgres port, bypassing PgBouncer
       # if you add a pooler in front of postgres later.
-      - MIGRATIONS_DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
+      - MIGRATIONS_DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram_dev}@postgres:5432/engram
       # Optional shared token. Blank = ingest is open (self-hosted / trusted network).
       - AUTH_TOKEN=${AUTH_TOKEN:-}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -164,7 +164,7 @@ services:
       context: .
       dockerfile: services/ai/Dockerfile
     environment:
-      - DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
+      - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram_dev}@postgres:5432/engram
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_TOPIC_ANOMALIES=engram.alerts.anomalies
       - KAFKA_TOPIC_DLQ=engram.alerts.dlq
@@ -203,7 +203,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DATABASE_URL=postgresql://pulseai:${POSTGRES_PASSWORD:-pulseai_dev}@postgres:5432/pulseai
+      - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram_dev}@postgres:5432/engram
       - INGESTOR_HOST=${INGESTOR_HOST:-http://localhost:8000}
       # Optional shared token. Blank = dashboard has no login.
       - AUTH_TOKEN=${AUTH_TOKEN:-}
