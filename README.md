@@ -197,7 +197,7 @@ The incident appears on your dashboard within seconds.
 
 ### Email (SendGrid)
 
-1. Get an API key at app.sendgrid.com/settings/api_keys
+1. Get an API key at app.sendgrid.com/settings/api_keys 
 2. Set `SENDGRID_API_KEY`, `ALERT_EMAIL_FROM`, and `ALERT_EMAIL_TO` in `.env`
 3. Restart the ai service: `docker compose restart ai`
 
